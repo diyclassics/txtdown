@@ -11,7 +11,7 @@ Quamquam Ennius recte:
 
 > Amicus certus in re incerta cernitur,
 
-tamen haec duo levitatis et infirmitatis plerosque convincunt, aut si in bonis rebus contemnunt aut in malis deserunt.
+tamen haec duo levitatis et infirmitatis plerosque convincunt...
 ```
 
 ## Separating texts
