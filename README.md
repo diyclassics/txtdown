@@ -2,6 +2,8 @@
 
 Minimal markup for Latin text collections using human-readable markup with inferrable hierarchical structure for scholarly citation.
 
+*Initial format design: January 10, 2018*
+
 ## Installation
 
 ```bash
