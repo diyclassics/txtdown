@@ -2,10 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
 from txtdown import Document, Line, Metadata, Section, parse, write
-
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

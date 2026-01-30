@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from txtdown import Document, Line, Metadata, Section, parse
-
+from txtdown import Document, Line, Section, parse
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -219,3 +218,145 @@ Arma virumque cano...
         doc = parse(content)
 
         assert doc.metadata.scope == "1"
+
+
+class TestSectionTitles:
+    """Tests for section titles."""
+
+    def test_section_with_title(self):
+        """Parse section with title."""
+        content = """--- prooemium: Introduction
+
+This is the introduction.
+
+--- 1: Book One
+
+First book content.
+"""
+        doc = parse(content)
+
+        assert len(doc.sections) == 2
+        assert doc.sections[0].id == "prooemium"
+        assert doc.sections[0].title == "Introduction"
+        assert doc.sections[1].id == "1"
+        assert doc.sections[1].title == "Book One"
+
+    def test_section_title_round_trip(self):
+        """Section titles survive round-trip."""
+        from txtdown import write
+
+        content = """--- intro: Preface
+
+Opening remarks.
+"""
+        doc = parse(content)
+        output = write(doc)
+        doc2 = parse(output)
+
+        assert doc2.sections[0].id == "intro"
+        assert doc2.sections[0].title == "Preface"
+
+
+class TestIndexAccess:
+    """Tests for 1-indexed bracket access."""
+
+    def test_document_getitem(self):
+        """Document[] uses 1-indexed access."""
+        content = """--- 1
+
+First section.
+
+--- 2
+
+Second section.
+
+--- 3
+
+Third section.
+"""
+        doc = parse(content)
+
+        assert doc[1].id == "1"
+        assert doc[2].id == "2"
+        assert doc[3].id == "3"
+
+    def test_document_getitem_out_of_range(self):
+        """Document[] raises IndexError for invalid index."""
+        content = "Single section."
+        doc = parse(content)
+
+        with pytest.raises(IndexError):
+            doc[0]  # 0 is invalid (1-indexed)
+        with pytest.raises(IndexError):
+            doc[2]  # Only 1 section
+
+    def test_section_getitem(self):
+        """Section[] uses 1-indexed access."""
+        content = """Line one.
+Line two.
+Line three.
+"""
+        doc = parse(content)
+        section = doc.sections[0]
+
+        assert section[1].text == "Line one."
+        assert section[2].text == "Line two."
+        assert section[3].text == "Line three."
+
+    def test_section_getitem_out_of_range(self):
+        """Section[] raises IndexError for invalid index."""
+        content = "Only one line."
+        doc = parse(content)
+        section = doc.sections[0]
+
+        with pytest.raises(IndexError):
+            section[0]  # 0 is invalid
+        with pytest.raises(IndexError):
+            section[2]  # Only 1 line
+
+
+class TestMalformedInput:
+    """Tests for edge cases and malformed input."""
+
+    def test_empty_content(self):
+        """Empty content produces empty document."""
+        doc = parse("")
+        assert len(doc.sections) == 0
+
+    def test_whitespace_only(self):
+        """Whitespace-only content produces empty document."""
+        doc = parse("   \n\n   \n")
+        assert len(doc.sections) == 0
+
+    def test_invalid_yaml_warns(self):
+        """Invalid YAML in front matter emits warning."""
+        content = """---
+invalid: yaml: content: here
+  bad indentation
+---
+
+Content.
+"""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            doc = parse(content)
+            # Should still parse, just with empty metadata
+            assert len(doc.sections) == 1
+            # Should have warned
+            assert len(w) == 1
+            assert "YAML" in str(w[0].message)
+
+    def test_unclosed_front_matter(self):
+        """Unclosed front matter treated as no front matter."""
+        content = """---
+author: Test
+This never closes
+
+So this is all content.
+"""
+        doc = parse(content)
+        # Should treat entire thing as content (no metadata)
+        assert doc.metadata.author is None
+        assert len(doc.sections) == 1

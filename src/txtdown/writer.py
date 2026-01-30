@@ -48,13 +48,19 @@ def _serialize(doc: Document) -> str:
 
         # Add explicit ID if section has non-numeric or non-sequential ID
         expected_id = str(i + 1)
-        if section.id != expected_id:
-            # Rewrite the separator with ID
+        needs_header = section.id != expected_id or section.title
+        if needs_header:
+            # Build header: "--- id" or "--- id: title"
+            if section.title:
+                header = f"--- {section.id}: {section.title}"
+            else:
+                header = f"--- {section.id}"
+            # Rewrite the separator with ID/title
             if i > 0:
-                parts[-1] = f"--- {section.id}"
+                parts[-1] = header
             else:
                 # First section with explicit ID
-                parts.append(f"--- {section.id}")
+                parts.append(header)
 
         # Section metadata (immediately after separator, no blank line)
         if section.metadata:

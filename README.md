@@ -122,8 +122,7 @@ Additional fields are preserved in `metadata.extras`.
 ### Functions
 
 - `parse(path_or_content: str) -> Document` — Parse a `.txtd` file or string
-- `write(doc: Document, path: str) -> None` — Write document to file
-- `serialize(doc: Document) -> str` — Serialize document to string
+- `write(doc: Document, path: str | None) -> str` — Write to file if path given; always returns serialized string
 
 ### Classes
 

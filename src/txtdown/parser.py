@@ -1,6 +1,7 @@
 """Parser for txtdown format."""
 
 import re
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,9 @@ def parse(source: str | Path) -> Document:
 
 def _looks_like_path(s: str) -> bool:
     """Heuristic to detect if string is a file path."""
+    # Empty string is not a path
+    if not s or not s.strip():
+        return False
     # If it starts with ---, it's content
     if s.strip().startswith("---"):
         return False
@@ -45,8 +49,9 @@ def _looks_like_path(s: str) -> bool:
     # If it ends with .txtdown or .td, it's a path
     if s.endswith((".txtd", ".txtdown")):
         return True
-    # If it exists as a file, it's a path
-    return Path(s).exists()
+    # If it exists as a file (not directory), it's a path
+    p = Path(s)
+    return p.exists() and p.is_file()
 
 
 def _parse_content(content: str) -> Document:
@@ -92,7 +97,8 @@ def _parse_front_matter(lines: list[str]) -> tuple[Metadata, int]:
     yaml_content = "\n".join(lines[start + 1 : end])
     try:
         data = yaml.safe_load(yaml_content) or {}
-    except yaml.YAMLError:
+    except yaml.YAMLError as e:
+        warnings.warn(f"Failed to parse YAML front matter: {e}", stacklevel=3)
         data = {}
 
     return Metadata.from_dict(data), end + 1

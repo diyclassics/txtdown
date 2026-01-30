@@ -78,6 +78,10 @@ class Section:
         is_numbered: Whether the ID is a number (vs. a name)
         title: Optional section title
         metadata: Section-specific metadata (supersedes document metadata)
+
+    Note:
+        Indexing with [] uses 1-based indexing to match scholarly citations.
+        Use section[1] for the first line, not section[0].
     """
     id: str
     lines: list[Line] = field(default_factory=list)
@@ -107,6 +111,11 @@ class Document:
     Attributes:
         metadata: Document metadata
         sections: List of sections
+
+    Note:
+        Indexing with [] uses 1-based indexing to match scholarly citations.
+        Use doc[1] for the first section, not doc[0].
+        For citation-based access, use doc.get("1") or doc.get("1.3").
     """
     metadata: Metadata = field(default_factory=Metadata)
     sections: list[Section] = field(default_factory=list)
