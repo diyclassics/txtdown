@@ -60,9 +60,11 @@ class Line:
     Attributes:
         text: The line content
         number: Line number within the section (1-indexed)
+        speaker: Speaker name for dramatic texts (None for non-dialogue)
     """
     text: str
     number: int
+    speaker: str | None = None
 
     def __str__(self) -> str:
         return self.text

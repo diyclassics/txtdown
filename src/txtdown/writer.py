@@ -76,7 +76,10 @@ def _serialize(doc: Document) -> str:
 
         # Section content
         for line in section.lines:
-            parts.append(line.text)
+            if line.speaker:
+                parts.append(f"@{line.speaker}: {line.text}")
+            else:
+                parts.append(line.text)
 
     # Ensure trailing newline
     content = "\n".join(parts)

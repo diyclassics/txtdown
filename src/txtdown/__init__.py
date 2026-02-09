@@ -16,7 +16,7 @@ from .models import Document, Line, Metadata, Section
 from .parser import parse
 from .writer import write
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Document",

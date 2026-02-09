@@ -13,6 +13,9 @@ from .models import Document, Line, Metadata, Section
 # Must be at start of line, at least 3 dashes
 SECTION_SEP_PATTERN = re.compile(r"^-{3,}\s*(.*)$")
 
+# Pattern for speaker markup: @SpeakerName: speech text
+SPEAKER_PATTERN = re.compile(r"^@([^:]+):\s*(.*)")
+
 
 def parse(source: str | Path) -> Document:
     """Parse a txtdown file or string.
@@ -265,7 +268,13 @@ def _make_section(
     for text in raw_lines:
         if text.strip():  # Skip blank lines for numbering
             line_num += 1
-            lines.append(Line(text=text, number=line_num))
+            speaker_match = SPEAKER_PATTERN.match(text)
+            if speaker_match:
+                speaker = speaker_match.group(1).strip()
+                speech = speaker_match.group(2)
+                lines.append(Line(text=speech, number=line_num, speaker=speaker))
+            else:
+                lines.append(Line(text=text, number=line_num))
 
     # Determine if ID is numeric
     is_numbered = section_id.isdigit()

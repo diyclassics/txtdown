@@ -2,8 +2,6 @@
 
 Minimal markup for Latin text collections using human-readable markup with inferrable hierarchical structure for scholarly citation.
 
-*Initial format design: January 10, 2018*
-
 ## Installation
 
 ```bash
@@ -85,6 +83,31 @@ Tandem venit amor, qualem texisse pudori
 
 The parser preserves indentation. For NLP, TxtdownReader strips leading whitespace when joining lines for sentence segmentation.
 
+### Speaker Markup (dramatic texts)
+
+For dramatic texts, use `@Speaker:` at the start of a line to mark speaker attribution:
+
+```
+@Diocletianus: Quid sibi vult ista, quae vos agitat, fatuitas?
+@Agapes: quod signum fatuitatis nobis inesse deprehendis?
+@Diocletianus: Evidens magnumque.
+```
+
+The parser extracts the speaker name into `line.speaker` and keeps `line.text` as pure speech text — ideal for NLP pipelines that need clean text without markup. Multi-word speaker names are supported:
+
+```
+@Coniunx Dulcitii: Heu, heu! mi senior Dulciti, quid pateris?
+```
+
+```python
+doc = parse("dulcitius.txtd")
+for line in doc.sections[0].lines:
+    print(f"{line.speaker}: {line.text}")
+# Diocletianus: Quid sibi vult ista...
+```
+
+Non-speaker lines (stage directions, prose) have `line.speaker = None`. Speaker markup round-trips through `write()`.
+
 ### Inline Markup (planned)
 
 Blockquotes for embedded verse in prose:
@@ -128,7 +151,7 @@ Additional fields are preserved in `metadata.extras`.
 
 - `Document` — Container with `metadata: Metadata` and `sections: list[Section]`
 - `Section` — Container with `id: str`, `lines: list[Line]`, optional `title` and `metadata`
-- `Line` — Container with `text: str` and `number: int`
+- `Line` — Container with `text: str`, `number: int`, and optional `speaker: str | None`
 - `Metadata` — Container with `author`, `work`, `source`, `scope`, and `extras` dict
 
 ## Development
@@ -145,6 +168,10 @@ pytest tests/ -v
 # Run with coverage
 pytest tests/ --cov=txtdown --cov-report=term-missing
 ```
+
+## Project History
+
+The idea for txtdown originated in January 2018, inspired by the need for a document format for Latin text collections that balanced the simplicity of plaintext with the more involved markup of XML-based formats like TEI. The goal was to create a format that is both human-readable and computer-tractable, supporting hierarchical structures, fundamental annotations, and embedded metadata. Txtdown has since been influenced by ongoing work on annotation projects such as the [Representing Women Authorship in the Latin Treebanks (RWALT)](https://diyclassics.github.io/rwalt-site/) project.
 
 ## License
 

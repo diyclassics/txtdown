@@ -165,3 +165,70 @@ class TestWriteToFile:
 
         assert doc2.metadata.author == "Roundtrip Test"
         assert len(doc2.sections[0].lines) == 2
+
+
+class TestWriteSpeaker:
+    """Tests for writing speaker markup."""
+
+    def test_write_speaker_line(self):
+        """Speaker lines serialize as @Speaker: text."""
+        doc = Document(
+            sections=[
+                Section(id="1", lines=[
+                    Line("Quid sibi vult?", 1, speaker="Diocletianus"),
+                ])
+            ]
+        )
+        output = write(doc)
+        assert "@Diocletianus: Quid sibi vult?" in output
+
+    def test_write_non_speaker_line(self):
+        """Non-speaker lines serialize without @ prefix."""
+        doc = Document(
+            sections=[
+                Section(id="1", lines=[Line("Plain text.", 1)])
+            ]
+        )
+        output = write(doc)
+        assert "Plain text." in output
+        assert "@" not in output
+
+    def test_roundtrip_speaker(self):
+        """Speaker markup round-trips correctly."""
+        content = "@Agapes: Esto securus.\n@Diocletianus: Quid?"
+        doc1 = parse(content)
+        written = write(doc1)
+        doc2 = parse(written)
+
+        assert len(doc2.sections[0].lines) == 2
+        assert doc2.sections[0].lines[0].speaker == "Agapes"
+        assert doc2.sections[0].lines[0].text == "Esto securus."
+        assert doc2.sections[0].lines[1].speaker == "Diocletianus"
+        assert doc2.sections[0].lines[1].text == "Quid?"
+
+    def test_roundtrip_multi_word_speaker(self):
+        """Multi-word speaker names round-trip correctly."""
+        content = "@Coniunx Dulcitii: Heu, heu!"
+        doc1 = parse(content)
+        written = write(doc1)
+        doc2 = parse(written)
+
+        line = doc2.sections[0].lines[0]
+        assert line.speaker == "Coniunx Dulcitii"
+        assert line.text == "Heu, heu!"
+
+    def test_roundtrip_mixed(self):
+        """Mixed speaker and non-speaker lines round-trip correctly."""
+        content = "Stage direction.\n@Hirena: My line.\nAnother direction."
+        doc1 = parse(content)
+        written = write(doc1)
+        doc2 = parse(written)
+
+        lines = doc2.sections[0].lines
+        assert len(lines) == 3
+        assert lines[0].speaker is None
+        assert lines[0].text == "Stage direction."
+        assert lines[1].speaker == "Hirena"
+        assert lines[1].text == "My line."
+        assert lines[2].speaker is None
+        assert lines[2].text == "Another direction."
