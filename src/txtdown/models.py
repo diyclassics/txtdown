@@ -61,10 +61,12 @@ class Line:
         text: The line content
         number: Line number within the section (1-indexed)
         speaker: Speaker name for dramatic texts (None for non-dialogue)
+        label: Editorial line label when it differs from number (e.g., "983a")
     """
     text: str
     number: int
     speaker: str | None = None
+    label: str | None = None
 
     def __str__(self) -> str:
         return self.text
@@ -151,11 +153,19 @@ class Document:
         if len(parts) == 1:
             return section
 
+        line_ref = parts[1]
+
+        # Try label lookup first (handles "983a" etc.)
+        for line in section.lines:
+            if line.label == line_ref:
+                return line
+
+        # Fall back to numeric line number
         try:
-            line_num = int(parts[1])
+            line_num = int(line_ref)
             return section[line_num]
         except (ValueError, IndexError) as e:
-            msg = f"Line '{parts[1]}' not found in section '{section_id}'"
+            msg = f"Line '{line_ref}' not found in section '{section_id}'"
             raise KeyError(msg) from e
 
     def __len__(self) -> int:

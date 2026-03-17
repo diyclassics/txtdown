@@ -540,3 +540,173 @@ class TestParseDulcitius:
         for l1, l2 in zip(dulcitius_doc.sections[0].lines, doc2.sections[0].lines):
             assert l1.speaker == l2.speaker
             assert l1.text == l2.text
+
+
+class TestExplicitLineNumbering:
+    """Tests for explicit line numbering (leading prefix and trailing label)."""
+
+    def test_leading_prefix_matches_implicit(self):
+        """Explicit N. prefix produces same result as implicit numbering."""
+        implicit = parse("--- 3\n\nCum adhuc, inquit.\net ego dixi ei.")
+        explicit = parse("--- 3\n\n1. Cum adhuc, inquit.\n2. et ego dixi ei.")
+
+        s1, s2 = implicit.sections[0], explicit.sections[0]
+        assert len(s1.lines) == len(s2.lines)
+        for l1, l2 in zip(s1.lines, s2.lines):
+            assert l1.number == l2.number
+            assert l1.text == l2.text
+
+    def test_leading_prefix_stripped(self):
+        """Leading N. prefix is stripped from line text."""
+        doc = parse("1. First line.\n2. Second line.")
+        assert doc.sections[0].lines[0].text == "First line."
+        assert doc.sections[0].lines[1].text == "Second line."
+
+    def test_leading_prefix_reordering(self):
+        """Leading prefixes override auto-numbering for reordered lines."""
+        content = (
+            "Suave, mari magno\n"
+            "e terra magnum\n"
+            "non quia vexari\n"
+            "sed quibus ipse\n"
+            "6. suave etiam belli\n"
+            "5. per campos instructa\n"
+            "7. sed nihil dulcius est\n"
+            "edita doctrina\n"
+            "despicere unde queas\n"
+            "errare atque viam\n"
+        )
+        doc = parse(content)
+        lines = doc.sections[0].lines
+
+        assert lines[0].number == 1  # auto
+        assert lines[1].number == 2  # auto
+        assert lines[2].number == 3  # auto
+        assert lines[3].number == 4  # auto
+        assert lines[4].number == 6  # explicit
+        assert lines[4].text == "suave etiam belli"
+        assert lines[5].number == 5  # explicit (out of order)
+        assert lines[5].text == "per campos instructa"
+        assert lines[6].number == 7  # explicit
+        assert lines[7].number == 8  # auto (continues from 7)
+        assert lines[8].number == 9  # auto
+        assert lines[9].number == 10  # auto
+
+    def test_mixed_explicit_implicit(self):
+        """Explicit numbers that match auto-increment are harmless."""
+        doc = parse("1. First.\n2. Second.\n3. Third.")
+        lines = doc.sections[0].lines
+        assert [l.number for l in lines] == [1, 2, 3]
+        assert [l.text for l in lines] == ["First.", "Second.", "Third."]
+
+    def test_trailing_label(self):
+        """Trailing labels are extracted into Line.label."""
+        content = (
+            "propterea eri imperium exsequor;         980\n"
+            "atque mihi id prodest.\n"
+        )
+        doc = parse(content)
+        lines = doc.sections[0].lines
+
+        assert lines[0].text == "propterea eri imperium exsequor;"
+        assert lines[0].label == "980"
+        assert lines[0].number == 1  # auto-incremented
+        assert lines[1].label is None
+        assert lines[1].number == 2
+
+    def test_trailing_label_with_letter(self):
+        """Trailing labels can include a letter suffix (983a, 983b)."""
+        content = (
+            "[servi, qui cum culpa carent]         983a\n"
+            "[nam illi, qui nil metuont]         983b\n"
+        )
+        doc = parse(content)
+        lines = doc.sections[0].lines
+
+        assert lines[0].label == "983a"
+        assert lines[1].label == "983b"
+
+    def test_trailing_label_not_false_positive(self):
+        """Single space before a number is not a trailing label."""
+        doc = parse("anno 203 facta est.")
+        line = doc.sections[0].lines[0]
+        assert line.label is None
+        assert line.text == "anno 203 facta est."
+
+    def test_citation_by_label(self):
+        """doc.get() can find lines by label."""
+        content = (
+            "--- 1\n\n"
+            "first line         980\n"
+            "second line\n"
+            "third line         983a\n"
+        )
+        doc = parse(content)
+
+        line = doc.get("1.980")
+        assert line.text == "first line"
+
+        line = doc.get("1.983a")
+        assert line.text == "third line"
+
+    def test_citation_by_number_still_works(self):
+        """Numeric citation still works alongside labels."""
+        content = (
+            "--- 1\n\n"
+            "first line         980\n"
+            "second line\n"
+        )
+        doc = parse(content)
+
+        line = doc.get("1.1")
+        assert line.text == "first line"
+
+        line = doc.get("1.2")
+        assert line.text == "second line"
+
+    def test_leading_prefix_with_speaker(self):
+        """Leading prefix works combined with speaker markup."""
+        doc = parse("3. @Perpetua: Christiana sum.")
+        line = doc.sections[0].lines[0]
+        assert line.number == 3
+        assert line.speaker == "Perpetua"
+        assert line.text == "Christiana sum."
+
+    def test_round_trip_reordered_lines(self):
+        """Reordered lines round-trip with explicit prefixes preserved."""
+        from txtdown import write
+
+        content = (
+            "line one\n"
+            "line two\n"
+            "4. line four\n"
+            "3. line three\n"
+            "line five\n"
+        )
+        doc = parse(content)
+        written = write(doc)
+        doc2 = parse(written)
+
+        lines1 = doc.sections[0].lines
+        lines2 = doc2.sections[0].lines
+        for l1, l2 in zip(lines1, lines2):
+            assert l1.number == l2.number
+            assert l1.text == l2.text
+
+    def test_round_trip_trailing_labels(self):
+        """Trailing labels round-trip correctly."""
+        from txtdown import write
+
+        content = (
+            "first line         980\n"
+            "second line\n"
+            "third line         983a\n"
+        )
+        doc = parse(content)
+        written = write(doc)
+        doc2 = parse(written)
+
+        for l1, l2 in zip(doc.sections[0].lines, doc2.sections[0].lines):
+            assert l1.text == l2.text
+            assert l1.label == l2.label
+            assert l1.number == l2.number
