@@ -13,8 +13,8 @@ from .models import Document, Line, Metadata, Section
 # Must be at start of line, at least 3 dashes
 SECTION_SEP_PATTERN = re.compile(r"^-{3,}\s*(.*)$")
 
-# Pattern for speaker markup: @SpeakerName: speech text
-SPEAKER_PATTERN = re.compile(r"^@([^:]+):\s*(.*)")
+# Pattern for speaker markup: @SingleWord: speech text
+SPEAKER_PATTERN = re.compile(r"^@(\w+):\s*(.*)")
 
 # Pattern for leading explicit line number: "6. text" or "983. text"
 LEADING_NUMBER_PATTERN = re.compile(r"^(\d+)\.\s+(.*)")
@@ -279,7 +279,7 @@ def _make_section(
 
             speaker_match = SPEAKER_PATTERN.match(text)
             if speaker_match:
-                speaker = speaker_match.group(1).strip()
+                speaker = speaker_match.group(1)
                 speech = speaker_match.group(2)
                 lines.append(
                     Line(text=speech, number=number, speaker=speaker, label=label)

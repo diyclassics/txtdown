@@ -206,15 +206,15 @@ class TestWriteSpeaker:
         assert doc2.sections[0].lines[1].speaker == "Diocletianus"
         assert doc2.sections[0].lines[1].text == "Quid?"
 
-    def test_roundtrip_multi_word_speaker(self):
-        """Multi-word speaker names round-trip correctly."""
-        content = "@Coniunx Dulcitii: Heu, heu!"
+    def test_roundtrip_speaker(self):
+        """Single-word speaker names round-trip correctly."""
+        content = "@Coniunx: Heu, heu!"
         doc1 = parse(content)
         written = write(doc1)
         doc2 = parse(written)
 
         line = doc2.sections[0].lines[0]
-        assert line.speaker == "Coniunx Dulcitii"
+        assert line.speaker == "Coniunx"
         assert line.text == "Heu, heu!"
 
     def test_roundtrip_mixed(self):

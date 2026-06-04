@@ -418,12 +418,12 @@ class TestSpeakerMarkup:
         assert lines[2].speaker is None
         assert lines[2].text == "Another direction."
 
-    def test_multi_word_speaker(self):
-        """Multi-word speaker names are supported."""
+    def test_multi_word_speaker_not_supported(self):
+        """Multi-word speaker names are not supported; parsed as plain text."""
         doc = parse("@Coniunx Dulcitii: Heu, heu!")
         line = doc.sections[0].lines[0]
-        assert line.speaker == "Coniunx Dulcitii"
-        assert line.text == "Heu, heu!"
+        assert line.speaker is None
+        assert line.text == "@Coniunx Dulcitii: Heu, heu!"
 
     def test_line_numbering_with_speakers(self):
         """Speaker lines are numbered normally."""

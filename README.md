@@ -35,7 +35,7 @@ write(doc, "output.txtd")
 
 ## Format Specification
 
-A `.txtd` file consists of optional YAML front matter followed by sections separated by horizontal rules (`---`).
+A `.txtd` file consists of YAML front matter followed by sections separated by horizontal rules (`---`). The front matter block is required; `work` is the only required field.
 
 ### Basic Structure
 
@@ -93,11 +93,7 @@ For dramatic texts, use `@Speaker:` at the start of a line to mark speaker attri
 @Diocletianus: Evidens magnumque.
 ```
 
-The parser extracts the speaker name into `line.speaker` and keeps `line.text` as pure speech text — ideal for NLP pipelines that need clean text without markup. Multi-word speaker names are supported:
-
-```
-@Coniunx Dulcitii: Heu, heu! mi senior Dulciti, quid pateris?
-```
+The parser extracts the speaker name into `line.speaker` and keeps `line.text` as pure speech text — ideal for NLP pipelines that need clean text without markup.
 
 ```python
 doc = parse("dulcitius.txtd")
@@ -129,12 +125,10 @@ The parser preserves indentation. For NLP, TxtdownReader joins these into a sing
 
 ### Metadata
 
-Standard fields (all optional):
-
 | Field | Description |
 |-------|-------------|
+| `work` | Work title (**required**) |
 | `author` | Author name |
-| `work` | Work title |
 | `source` | Source URL or reference |
 | `scope` | Portion of work in file (e.g., `1-6` for books 1-6) |
 
