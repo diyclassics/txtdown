@@ -75,8 +75,26 @@ def _serialize(doc: Document) -> str:
         parts.append("")
 
         # Section content
+        auto_number = 0
         for line in section.lines:
-            parts.append(line.text)
+            auto_number += 1
+
+            # Build text with speaker markup if needed
+            if line.speaker:
+                text = f"@{line.speaker}: {line.text}"
+            else:
+                text = line.text
+
+            # Add leading prefix if number differs from auto-increment
+            if line.number != auto_number:
+                text = f"{line.number}. {text}"
+                auto_number = line.number
+
+            # Add trailing label if present
+            if line.label:
+                text = f"{text}         {line.label}"
+
+            parts.append(text)
 
     # Ensure trailing newline
     content = "\n".join(parts)

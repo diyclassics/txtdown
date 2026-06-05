@@ -13,6 +13,16 @@ from .models import Document, Line, Metadata, Section
 # Must be at start of line, at least 3 dashes
 SECTION_SEP_PATTERN = re.compile(r"^-{3,}\s*(.*)$")
 
+# Pattern for speaker markup: @SingleWord: speech text
+SPEAKER_PATTERN = re.compile(r"^@(\w+):\s*(.*)")
+
+# Pattern for leading explicit line number: "6. text" or "983. text"
+LEADING_NUMBER_PATTERN = re.compile(r"^(\d+)\.\s+(.*)")
+
+# Pattern for trailing line label: "text         980" or "text         983a"
+# Requires 2+ whitespace chars before the label to avoid false positives
+TRAILING_LABEL_PATTERN = re.compile(r"^(.*?)\s{2,}(\d+[a-z]?)\s*$")
+
 
 def parse(source: str | Path) -> Document:
     """Parse a txtdown file or string.
@@ -261,11 +271,21 @@ def _make_section(
 
     # Create numbered Line objects (only for non-empty lines)
     lines: list[Line] = []
-    line_num = 0
+    last_number = 0
     for text in raw_lines:
         if text.strip():  # Skip blank lines for numbering
-            line_num += 1
-            lines.append(Line(text=text, number=line_num))
+            text, number, label = _extract_line_numbering(text, last_number)
+            last_number = number
+
+            speaker_match = SPEAKER_PATTERN.match(text)
+            if speaker_match:
+                speaker = speaker_match.group(1)
+                speech = speaker_match.group(2)
+                lines.append(
+                    Line(text=speech, number=number, speaker=speaker, label=label)
+                )
+            else:
+                lines.append(Line(text=text, number=number, label=label))
 
     # Determine if ID is numeric
     is_numbered = section_id.isdigit()
@@ -277,3 +297,40 @@ def _make_section(
         title=title,
         metadata=metadata or {},
     )
+
+
+def _extract_line_numbering(
+    text: str, last_number: int
+) -> tuple[str, int, str | None]:
+    """Extract explicit line numbering from a line of text.
+
+    Handles three styles:
+    - Leading prefix: "6. suave etiam..." → number=6, text="suave etiam..."
+    - Trailing label: "servo id;         980" → number=auto, label="980"
+    - Implicit: auto-increment from last_number
+
+    Args:
+        text: Raw line text
+        last_number: Previous line's number (for auto-increment)
+
+    Returns:
+        Tuple of (cleaned_text, number, label)
+    """
+    label: str | None = None
+
+    # Check for trailing label first (e.g., "text         980" or "983a")
+    trailing_match = TRAILING_LABEL_PATTERN.match(text)
+    if trailing_match:
+        text = trailing_match.group(1).rstrip()
+        label = trailing_match.group(2)
+
+    # Check for leading explicit number (e.g., "6. text")
+    leading_match = LEADING_NUMBER_PATTERN.match(text)
+    if leading_match:
+        number = int(leading_match.group(1))
+        text = leading_match.group(2)
+        return text, number, label
+
+    # Implicit: auto-increment
+    number = last_number + 1
+    return text, number, label
