@@ -4,9 +4,19 @@ from pathlib import Path
 
 import pytest
 
-from txtdown import Document, Line, Section, parse
+from txtdown import Document, Line, Section
+from txtdown import parse as strict_parse
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def parse(source, strict=False, **kwargs):
+    """Test helper: lenient by default so fragment tests need no boilerplate.
+
+    The library default is strict=True (front matter + ``work`` required); that
+    behavior is exercised directly via ``strict_parse`` in TestStrictValidation.
+    """
+    return strict_parse(source, strict=strict, **kwargs)
 
 
 class TestParseBasic:
@@ -818,3 +828,52 @@ class TestParseExamples:
         ):
             doc = parse(self.EXAMPLES_DIR / name)
             assert parse(write(doc)) == doc
+
+
+class TestStrictValidation:
+    """parse() is strict by default: front matter with a `work` field required."""
+
+    VALID = "---\nwork: Epistulae\nauthor: Sulpicia\n---\n\nTandem venit amor."
+
+    def test_valid_document_ok(self):
+        """A document with front matter and work parses without error."""
+        doc = strict_parse(self.VALID)
+        assert doc.metadata.work == "Epistulae"
+
+    def test_missing_front_matter_raises(self):
+        """No front matter block raises ValueError in strict mode."""
+        with pytest.raises(ValueError, match="front matter"):
+            strict_parse("Tandem venit amor, qualem texisse pudori")
+
+    def test_missing_work_raises(self):
+        """Front matter without a work field raises ValueError."""
+        content = "---\nauthor: Sulpicia\n---\n\nTandem venit amor."
+        with pytest.raises(ValueError, match="work"):
+            strict_parse(content)
+
+    def test_empty_string_raises(self):
+        """An empty string has no front matter and raises in strict mode."""
+        with pytest.raises(ValueError):
+            strict_parse("")
+
+    def test_strict_false_allows_fragment(self):
+        """strict=False parses a fragment with no metadata."""
+        doc = strict_parse("@Diocletianus: Quid?", strict=False)
+        assert doc.sections[0].lines[0].speaker == "Diocletianus"
+
+    def test_strict_false_allows_missing_work(self):
+        """strict=False parses front matter without a work field."""
+        doc = strict_parse("---\nauthor: Sulpicia\n---\n\nText.", strict=False)
+        assert doc.metadata.author == "Sulpicia"
+        assert doc.metadata.work is None
+
+    def test_shipped_examples_pass_strict(self):
+        """Every shipped example satisfies strict validation."""
+        examples_dir = Path(__file__).parent.parent / "examples"
+        for name in (
+            "cicero-de-amicitia.txtd",
+            "augustine-civ-dei-1.2.txtd",
+            "sulpicia.txtd",
+        ):
+            doc = strict_parse(examples_dir / name)  # must not raise
+            assert doc.metadata.work

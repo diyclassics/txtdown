@@ -18,11 +18,10 @@ First public release.
   speaker into `Line.speaker` and keeps `Line.text` as clean speech (single-word names).
 - **Explicit line numbering.** Leading `N.` prefixes override auto-increment, and trailing
   editorial labels (e.g. `983a`) are captured in `Line.label` and usable in citations.
+- **Strict validation.** `parse()` now requires a YAML front matter block with a `work`
+  field and raises `ValueError` when either is missing. Pass `parse(..., strict=False)` to
+  parse a fragment (single line or section) without metadata.
 - `examples/cicero-de-amicitia.txtd` — full *Laelius de Amicitia* with cross-source quotes.
-
-### Changed
-- Documentation aligned with actual parser behavior: front matter and the `work` field are
-  recommended conventions, not enforced requirements.
 
 ## [0.1.0] - Initial format
 

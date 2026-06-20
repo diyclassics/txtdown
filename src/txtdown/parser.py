@@ -28,14 +28,22 @@ LEADING_NUMBER_PATTERN = re.compile(r"^(\d+)\.\s+(.*)")
 TRAILING_LABEL_PATTERN = re.compile(r"^(.*?)\s{2,}(\d+[a-z]?)\s*$")
 
 
-def parse(source: str | Path) -> Document:
+def parse(source: str | Path, *, strict: bool = True) -> Document:
     """Parse a txtdown file or string.
 
     Args:
         source: File path or txtdown content string
+        strict: When True (default), require a YAML front matter block with a
+            ``work`` field and raise ValueError if either is missing. Pass
+            ``strict=False`` to parse a fragment (e.g. a single line or section)
+            without metadata.
 
     Returns:
         Parsed Document object
+
+    Raises:
+        ValueError: In strict mode, when the front matter block or the ``work``
+            field is missing.
     """
     # Handle file path vs string
     is_path = isinstance(source, Path)
@@ -46,7 +54,7 @@ def parse(source: str | Path) -> Document:
     else:
         content = source
 
-    return _parse_content(content)
+    return _parse_content(content, strict=strict)
 
 
 def _looks_like_path(s: str) -> bool:
@@ -68,17 +76,37 @@ def _looks_like_path(s: str) -> bool:
     return p.exists() and p.is_file()
 
 
-def _parse_content(content: str) -> Document:
+def _parse_content(content: str, strict: bool = True) -> Document:
     """Parse txtdown content string."""
     lines = content.split("\n")
 
-    # Extract front matter
+    # Extract front matter (body_start > 0 only when a closed block was found)
     metadata, body_start = _parse_front_matter(lines)
+    had_front_matter = body_start > 0
 
     # Parse body into sections
     sections = _parse_sections(lines[body_start:])
 
-    return Document(metadata=metadata, sections=sections)
+    doc = Document(metadata=metadata, sections=sections)
+
+    if strict:
+        _validate(doc, had_front_matter)
+
+    return doc
+
+
+def _validate(doc: Document, had_front_matter: bool) -> None:
+    """Enforce the required document structure in strict mode."""
+    if not had_front_matter:
+        raise ValueError(
+            "txtdown requires a YAML front matter block (--- ... ---). "
+            "Pass strict=False to parse a fragment without metadata."
+        )
+    if not doc.metadata.work:
+        raise ValueError(
+            "txtdown requires a 'work' field in the front matter. "
+            "Pass strict=False to parse without it."
+        )
 
 
 def _parse_front_matter(lines: list[str]) -> tuple[Metadata, int]:

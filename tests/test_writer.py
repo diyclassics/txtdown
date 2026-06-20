@@ -2,9 +2,16 @@
 
 from pathlib import Path
 
-from txtdown import Document, Line, Metadata, Section, parse, write
+from txtdown import Document, Line, Metadata, Section, write
+from txtdown import parse as strict_parse
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def parse(source, strict=False, **kwargs):
+    """Test helper: lenient by default so round-trip fragment tests need no
+    front matter. The library default is strict=True."""
+    return strict_parse(source, strict=strict, **kwargs)
 
 
 class TestWriteBasic:

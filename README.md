@@ -35,7 +35,7 @@ write(doc, "output.txtd")
 
 ## Format Specification
 
-A `.txtd` file consists of optional YAML front matter followed by sections separated by horizontal rules (`---`). Front matter is recommended; `work` is the conventional minimum (a future version will warn when it is missing). The parser does not currently enforce either.
+A `.txtd` file consists of a YAML front matter block followed by sections separated by horizontal rules (`---`). The front matter block is required and must include a `work` field; `parse()` raises `ValueError` otherwise. To parse a fragment without metadata (e.g. a single line or section), pass `strict=False`.
 
 ### Basic Structure
 
@@ -140,7 +140,7 @@ See `examples/cicero-de-amicitia.txtd` (Cicero quoting Ennius and Terence) and
 
 | Field | Description |
 |-------|-------------|
-| `work` | Work title (conventional minimum) |
+| `work` | Work title (**required**) |
 | `author` | Author name |
 | `source` | Source URL or reference |
 | `scope` | Portion of work in file (e.g., `1-6` for books 1-6) |
@@ -151,7 +151,7 @@ Additional fields are preserved in `metadata.extras`.
 
 ### Functions
 
-- `parse(path_or_content: str) -> Document` — Parse a `.txtd` file or string
+- `parse(path_or_content: str, *, strict: bool = True) -> Document` — Parse a `.txtd` file or string. Strict by default: raises `ValueError` if the front matter block or `work` field is missing; pass `strict=False` for fragments.
 - `write(doc: Document, path: str | None) -> str` — Write to file if path given; always returns serialized string
 
 ### Classes
