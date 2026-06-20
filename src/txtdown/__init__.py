@@ -2,7 +2,7 @@
 
 Example usage:
     >>> from txtdown import parse
-    >>> doc = parse("sulpicia.txtdown")
+    >>> doc = parse("sulpicia.txtd")
     >>> print(doc.metadata.author)
     Sulpicia
     >>> print(doc.sections[0].lines[0].text)

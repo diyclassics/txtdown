@@ -35,7 +35,7 @@ write(doc, "output.txtd")
 
 ## Format Specification
 
-A `.txtd` file consists of YAML front matter followed by sections separated by horizontal rules (`---`). The front matter block is required; `work` is the only required field.
+A `.txtd` file consists of optional YAML front matter followed by sections separated by horizontal rules (`---`). Front matter is recommended; `work` is the conventional minimum (a future version will warn when it is missing). The parser does not currently enforce either.
 
 ### Basic Structure
 
@@ -104,30 +104,43 @@ for line in doc.sections[0].lines:
 
 Non-speaker lines (stage directions, prose) have `line.speaker = None`. Speaker markup round-trips through `write()`.
 
-### Inline Markup (planned)
+### Cross-source Quotation
 
-Blockquotes for embedded verse in prose:
+Use `>` at the start of a line to mark text quoted verbatim from *another* literary
+source — an author embedding a poet's verse in their own prose, for example. This
+repurposes the familiar blockquote convention for the citational habits of classical texts:
 
 ```
-Nonne uidit Aeneas Priamum per aras
+Quamquam Ennius recte:
 
-> Sanguine foedantem quos ipse sacrauerat ignes?
+> Amicus certus in re incerta cernitur,
 
-Nonne Diomedes et Vlixes
-
->   caesis summae custodibus arcis.
-> Corripuere sacram effigiem manibusque cruentis
-> Virgineas ausi diuae contingere uittas?
+tamen haec duo levitatis et infirmitatis plerosque convincunt.
 ```
 
-The parser preserves indentation. For NLP, TxtdownReader joins these into a single sentence:
-`"Nonne uidit Aeneas Priamum per aras Sanguine foedantem quos ipse sacrauerat ignes?"`
+The parser strips the `>` marker and flags the line with `line.is_quote = True`, keeping
+`line.text` as clean quoted text. Consecutive `>` lines form a multi-line quotation:
+
+```
+> Negat quis, nego; ait, aio; postremo imperavi egomet mihi
+> Omnia adsentari,
+```
+
+```python
+doc = parse("cicero-de-amicitia.txtd")
+quotes = [line.text for s in doc.sections for line in s.lines if line.is_quote]
+# ['Amicus certus in re incerta cernitur,', ...]
+```
+
+Non-quote lines have `line.is_quote = False`. Quotation markup round-trips through `write()`.
+See `examples/cicero-de-amicitia.txtd` (Cicero quoting Ennius and Terence) and
+`examples/augustine-civ-dei-1.2.txtd` (Augustine quoting Virgil).
 
 ### Metadata
 
 | Field | Description |
 |-------|-------------|
-| `work` | Work title (**required**) |
+| `work` | Work title (conventional minimum) |
 | `author` | Author name |
 | `source` | Source URL or reference |
 | `scope` | Portion of work in file (e.g., `1-6` for books 1-6) |
@@ -145,7 +158,7 @@ Additional fields are preserved in `metadata.extras`.
 
 - `Document` — Container with `metadata: Metadata` and `sections: list[Section]`
 - `Section` — Container with `id: str`, `lines: list[Line]`, optional `title` and `metadata`
-- `Line` — Container with `text: str`, `number: int`, and optional `speaker: str | None`
+- `Line` — Container with `text: str`, `number: int`, optional `speaker: str | None` and `label: str | None`, and `is_quote: bool` (cross-source quotation)
 - `Metadata` — Container with `author`, `work`, `source`, `scope`, and `extras` dict
 
 ## Development
