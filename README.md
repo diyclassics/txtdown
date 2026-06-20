@@ -5,6 +5,12 @@ Minimal markup for Latin text collections using human-readable markup with infer
 ## Installation
 
 ```bash
+pip install txtdown
+```
+
+Or install the latest development version from source:
+
+```bash
 pip install git+https://github.com/diyclassics/txtdown.git
 ```
 
