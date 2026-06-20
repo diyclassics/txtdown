@@ -79,8 +79,10 @@ def _serialize(doc: Document) -> str:
         for line in section.lines:
             auto_number += 1
 
-            # Build text with speaker markup if needed
-            if line.speaker:
+            # Build text with speaker or quote markup if needed
+            if line.is_quote:
+                text = f"> {line.text}"
+            elif line.speaker:
                 text = f"@{line.speaker}: {line.text}"
             else:
                 text = line.text

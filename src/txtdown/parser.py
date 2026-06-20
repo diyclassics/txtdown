@@ -16,6 +16,10 @@ SECTION_SEP_PATTERN = re.compile(r"^-{3,}\s*(.*)$")
 # Pattern for speaker markup: @SingleWord: speech text
 SPEAKER_PATTERN = re.compile(r"^@(\w+):\s*(.*)")
 
+# Pattern for cross-source quotation: > verbatim quoted text
+# The single optional space after > is part of the marker, not the text.
+QUOTE_PATTERN = re.compile(r"^>\s?(.*)")
+
 # Pattern for leading explicit line number: "6. text" or "983. text"
 LEADING_NUMBER_PATTERN = re.compile(r"^(\d+)\.\s+(.*)")
 
@@ -274,6 +278,17 @@ def _make_section(
     last_number = 0
     for text in raw_lines:
         if text.strip():  # Skip blank lines for numbering
+            # Cross-source quotation: > marks verbatim text quoted from another
+            # source. Quoted text is preserved as-is (no number/label extraction).
+            quote_match = QUOTE_PATTERN.match(text.lstrip())
+            if quote_match:
+                number = last_number + 1
+                last_number = number
+                lines.append(
+                    Line(text=quote_match.group(1), number=number, is_quote=True)
+                )
+                continue
+
             text, number, label = _extract_line_numbering(text, last_number)
             last_number = number
 

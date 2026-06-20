@@ -62,11 +62,14 @@ class Line:
         number: Line number within the section (1-indexed)
         speaker: Speaker name for dramatic texts (None for non-dialogue)
         label: Editorial line label when it differs from number (e.g., "983a")
+        is_quote: True if the line is a cross-source quotation (``>`` markup),
+            i.e. verbatim text quoted from another author/work
     """
     text: str
     number: int
     speaker: str | None = None
     label: str | None = None
+    is_quote: bool = False
 
     def __str__(self) -> str:
         return self.text

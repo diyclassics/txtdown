@@ -596,8 +596,8 @@ class TestExplicitLineNumbering:
         """Explicit numbers that match auto-increment are harmless."""
         doc = parse("1. First.\n2. Second.\n3. Third.")
         lines = doc.sections[0].lines
-        assert [l.number for l in lines] == [1, 2, 3]
-        assert [l.text for l in lines] == ["First.", "Second.", "Third."]
+        assert [ln.number for ln in lines] == [1, 2, 3]
+        assert [ln.text for ln in lines] == ["First.", "Second.", "Third."]
 
     def test_trailing_label(self):
         """Trailing labels are extracted into Line.label."""
@@ -710,3 +710,111 @@ class TestExplicitLineNumbering:
             assert l1.text == l2.text
             assert l1.label == l2.label
             assert l1.number == l2.number
+
+
+class TestQuoteMarkup:
+    """Tests for > cross-source quotation markup."""
+
+    def test_quote_extraction(self):
+        """A > line is flagged as a quote with the marker stripped."""
+        doc = parse("> Amicus certus in re incerta cernitur,")
+        line = doc.sections[0].lines[0]
+        assert line.is_quote is True
+        assert line.text == "Amicus certus in re incerta cernitur,"
+
+    def test_quote_marker_not_in_text(self):
+        """The > marker does not survive in line.text."""
+        doc = parse("> Obsequium amicos, veritas odium parit.")
+        line = doc.sections[0].lines[0]
+        assert not line.text.startswith(">")
+
+    def test_quote_without_space(self):
+        """A > with no following space still parses as a quote."""
+        doc = parse(">Negat quis, nego;")
+        line = doc.sections[0].lines[0]
+        assert line.is_quote is True
+        assert line.text == "Negat quis, nego;"
+
+    def test_plain_line_not_quote(self):
+        """Ordinary lines have is_quote False."""
+        doc = parse("Quamquam Ennius recte:")
+        line = doc.sections[0].lines[0]
+        assert line.is_quote is False
+
+    def test_multi_line_quote(self):
+        """Consecutive > lines each flag as quotes."""
+        content = (
+            "> Negat quis, nego; ait, aio; postremo imperavi egomet mihi\n"
+            "> Omnia adsentari,"
+        )
+        doc = parse(content)
+        lines = doc.sections[0].lines
+        assert len(lines) == 2
+        assert all(ln.is_quote for ln in lines)
+        assert lines[1].text == "Omnia adsentari,"
+
+    def test_quote_among_prose(self):
+        """A quote embedded in prose: only the > line is a quote."""
+        content = (
+            "Quamquam Ennius recte:\n"
+            "> Amicus certus in re incerta cernitur,\n"
+            "tamen haec duo levitatis."
+        )
+        doc = parse(content)
+        lines = doc.sections[0].lines
+        assert [ln.is_quote for ln in lines] == [False, True, False]
+        assert lines[0].text == "Quamquam Ennius recte:"
+        assert lines[2].text == "tamen haec duo levitatis."
+
+    def test_quote_numbering(self):
+        """Quote lines are auto-numbered in sequence like any line."""
+        content = "First prose.\n> a quoted verse\nMore prose."
+        doc = parse(content)
+        lines = doc.sections[0].lines
+        assert [ln.number for ln in lines] == [1, 2, 3]
+
+    def test_quote_not_speaker(self):
+        """A quote line is not parsed as a speaker line."""
+        doc = parse("> @Diocletianus is mentioned in this quote")
+        line = doc.sections[0].lines[0]
+        assert line.is_quote is True
+        assert line.speaker is None
+
+    def test_quote_text_is_verbatim(self):
+        """Quoted text is preserved verbatim (no line-number extraction)."""
+        doc = parse("> 1. ut ait idem Terentius")
+        line = doc.sections[0].lines[0]
+        assert line.is_quote is True
+        assert line.text == "1. ut ait idem Terentius"
+
+
+class TestParseExamples:
+    """The shipped example files parse and round-trip correctly."""
+
+    EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
+
+    def test_cicero_quotes(self):
+        """The Cicero example flags its Ennius/Terence quotations."""
+        doc = parse(self.EXAMPLES_DIR / "cicero-de-amicitia.txtd")
+        quotes = [ln.text for s in doc.sections for ln in s.lines if ln.is_quote]
+        assert len(quotes) == 6
+        assert quotes[0] == "Amicus certus in re incerta cernitur,"
+
+    def test_augustine_quotes(self):
+        """The Augustine example flags its Virgil quotations."""
+        doc = parse(self.EXAMPLES_DIR / "augustine-civ-dei-1.2.txtd")
+        quotes = [ln for s in doc.sections for ln in s.lines if ln.is_quote]
+        assert len(quotes) >= 1
+        assert all(not ln.text.startswith(">") for ln in quotes)
+
+    def test_examples_round_trip(self):
+        """Every shipped example round-trips through write()."""
+        from txtdown import write
+
+        for name in (
+            "cicero-de-amicitia.txtd",
+            "augustine-civ-dei-1.2.txtd",
+            "sulpicia.txtd",
+        ):
+            doc = parse(self.EXAMPLES_DIR / name)
+            assert parse(write(doc)) == doc

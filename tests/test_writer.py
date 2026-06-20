@@ -206,7 +206,7 @@ class TestWriteSpeaker:
         assert doc2.sections[0].lines[1].speaker == "Diocletianus"
         assert doc2.sections[0].lines[1].text == "Quid?"
 
-    def test_roundtrip_speaker(self):
+    def test_roundtrip_speaker_single_word(self):
         """Single-word speaker names round-trip correctly."""
         content = "@Coniunx: Heu, heu!"
         doc1 = parse(content)
@@ -232,3 +232,48 @@ class TestWriteSpeaker:
         assert lines[1].text == "My line."
         assert lines[2].speaker is None
         assert lines[2].text == "Another direction."
+
+
+class TestWriteQuotes:
+    """Cross-source quotation (> markup) writing and round-trip."""
+
+    def test_quote_written_with_marker(self):
+        """A quote line serializes with a leading > marker."""
+        doc = Document(
+            sections=[
+                Section(id="1", lines=[Line("a quoted verse", 1, is_quote=True)])
+            ]
+        )
+        output = write(doc)
+        assert "> a quoted verse" in output
+
+    def test_plain_line_no_marker(self):
+        """Non-quote lines serialize without a > marker."""
+        doc = Document(
+            sections=[Section(id="1", lines=[Line("plain prose", 1)])]
+        )
+        output = write(doc)
+        assert "> " not in output
+
+    def test_roundtrip_quote(self):
+        """A quote among prose round-trips correctly."""
+        content = (
+            "Quamquam Ennius recte:\n"
+            "> Amicus certus in re incerta cernitur,\n"
+            "tamen haec duo levitatis."
+        )
+        doc1 = parse(content)
+        doc2 = parse(write(doc1))
+        assert doc1 == doc2
+        assert [ln.is_quote for ln in doc2.sections[0].lines] == [False, True, False]
+
+    def test_roundtrip_multi_line_quote(self):
+        """A multi-line quote block round-trips correctly."""
+        content = (
+            "> Negat quis, nego; ait, aio; postremo imperavi egomet mihi\n"
+            "> Omnia adsentari,"
+        )
+        doc1 = parse(content)
+        doc2 = parse(write(doc1))
+        assert doc1 == doc2
+        assert all(ln.is_quote for ln in doc2.sections[0].lines)
