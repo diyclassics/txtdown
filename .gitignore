@@ -28,6 +28,9 @@ wheels/
 venv/
 ENV/
 
+# uv (library: lockfile is not shipped or tracked)
+uv.lock
+
 # IDE
 .idea/
 .vscode/
