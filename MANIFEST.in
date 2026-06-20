@@ -1,0 +1,13 @@
+# Make the sdist a coherent, self-testing source release:
+# include the test suite with its fixtures, the example corpus, and the changelog
+# so downstream packagers can run the tests against the packaged source.
+graft tests
+graft examples
+include CHANGELOG.md
+include LICENSE
+include README.md
+
+# Never ship caches or compiled artifacts.
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .DS_Store

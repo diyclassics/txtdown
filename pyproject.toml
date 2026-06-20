@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 authors = [
     {name = "Patrick J. Burns"}
 ]
+keywords = ["latin", "markup", "text", "philology", "digital-humanities", "nlp"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -32,6 +33,12 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/diyclassics/txtdown"
+Repository = "https://github.com/diyclassics/txtdown"
+Changelog = "https://github.com/diyclassics/txtdown/blob/main/CHANGELOG.md"
+Issues = "https://github.com/diyclassics/txtdown/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
