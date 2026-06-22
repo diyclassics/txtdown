@@ -135,6 +135,32 @@ Conclusion.
         assert doc2.sections[1].id == "1"
         assert doc2.sections[2].id == "epilogue"
 
+    def test_roundtrip_compound_sections(self):
+        """Compound chapter.section ids round-trip, including the chapter field."""
+        original = """---
+work: De Senectute
+---
+
+--- 3.7: First
+
+Line one.
+Line two.
+
+--- 3.8
+
+Line three.
+"""
+        doc1 = parse(original)
+        written = write(doc1)
+        doc2 = parse(written)
+
+        assert "--- 3.7" in written
+        assert doc2.sections[0].id == "3.7"
+        assert doc2.sections[0].title == "First"
+        assert doc2.sections[0].chapter == 3
+        assert doc2.sections[1].id == "3.8"
+        assert doc2.sections[1].chapter == 3
+
 
 class TestWriteToFile:
     """Tests for writing to file."""

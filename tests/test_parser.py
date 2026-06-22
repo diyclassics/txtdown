@@ -197,6 +197,306 @@ Outro here.
         assert section.lines[0].text == "Intro here."
 
 
+class TestCompoundSectionIds:
+    """Tests for compound ``N.M`` (chapter.section) section ids."""
+
+    def test_compound_section(self):
+        """Parse a compound chapter.section marker."""
+        content = """--- 3.7
+
+First line.
+Second line.
+"""
+        doc = parse(content)
+
+        assert len(doc.sections) == 1
+        section = doc.sections[0]
+        assert section.id == "3.7"
+        assert section.levels == (3, 7)
+        assert section.chapter == 3
+        assert section.is_numbered
+
+    def test_deep_hierarchy(self):
+        """Parse an arbitrary-depth numeric label."""
+        content = """--- 1.2.3
+
+A line.
+"""
+        doc = parse(content)
+
+        section = doc.sections[0]
+        assert section.id == "1.2.3"
+        assert section.levels == (1, 2, 3)
+        assert section.chapter == 1  # first level
+        assert section.is_numbered
+
+    def test_flat_numeric_has_levels_but_no_chapter(self):
+        """A flat "1" is numeric (levels=(1,)) but has no chapter."""
+        content = """--- 1
+
+A line.
+"""
+        doc = parse(content)
+
+        section = doc.sections[0]
+        assert section.levels == (1,)
+        assert section.chapter is None
+        assert section.is_numbered
+
+    def test_compound_section_with_title(self):
+        """Compound id with a title still splits on the colon."""
+        content = """--- 3.7: De Senectute
+
+First line.
+"""
+        doc = parse(content)
+
+        section = doc.sections[0]
+        assert section.id == "3.7"
+        assert section.title == "De Senectute"
+        assert section.chapter == 3
+
+    def test_compound_section_with_metadata(self):
+        """Section metadata immediately after a compound header still parses."""
+        content = """--- 3.7
+speaker_role: narrator
+draft: true
+
+First line.
+"""
+        doc = parse(content)
+
+        section = doc.sections[0]
+        assert section.id == "3.7"
+        assert section.chapter == 3
+        assert section.metadata["speaker_role"] == "narrator"
+        assert section.metadata["draft"] is True
+
+    def test_flat_and_named_sections_have_no_chapter(self):
+        """Plain numeric and named ids leave chapter as None (regression guard)."""
+        content = """--- 1
+
+Numbered.
+
+--- prooemium
+
+Named.
+"""
+        doc = parse(content)
+
+        assert doc.sections[0].id == "1"
+        assert doc.sections[0].chapter is None
+        assert doc.sections[1].id == "prooemium"
+        assert doc.sections[1].chapter is None
+        assert doc.sections[1].levels is None  # named id is not numeric
+
+    def test_get_compound_section(self):
+        """get("3.7") resolves to the compound section, not section 3 / line 7."""
+        content = """--- 3.7
+
+First line.
+Second line.
+
+--- 3.8
+
+Other line.
+"""
+        doc = parse(content)
+
+        section = doc.get("3.7")
+        assert isinstance(section, Section)
+        assert section.id == "3.7"
+        assert section.chapter == 3
+
+    def test_get_compound_line(self):
+        """get("3.7.2") resolves to line 2 of compound section 3.7."""
+        content = """--- 3.7
+
+First line.
+Second line.
+"""
+        doc = parse(content)
+
+        line = doc.get("3.7.2")
+        assert isinstance(line, Line)
+        assert line.text == "Second line."
+        assert line.number == 2
+
+    def test_flat_citation_still_means_section_line(self):
+        """In a non-compound doc, "2.3" still means section 2, line 3."""
+        content = """A1
+A2
+A3
+
+---
+
+B1
+B2
+B3
+"""
+        doc = parse(content)
+
+        line = doc.get("2.3")
+        assert isinstance(line, Line)
+        assert line.text == "B3"
+
+
+class TestValidate:
+    """Tests for opt-in structural validation via doc.validate()."""
+
+    def test_clean_hierarchy_has_no_issues(self):
+        content = """--- 1.1
+
+a
+
+--- 1.2
+
+b
+
+--- 2.1
+
+c
+"""
+        doc = parse(content)
+
+        assert doc.validate() == []
+        assert doc.is_valid
+
+    def test_duplicate_label_is_error(self):
+        content = """--- 3.7
+
+a
+
+--- 3.7
+
+b
+"""
+        doc = parse(content)
+
+        issues = doc.validate()
+        kinds = {i.kind for i in issues}
+        assert "duplicate_label" in kinds
+        assert any(i.severity == "error" for i in issues)
+        assert not doc.is_valid
+
+    def test_out_of_order_is_error(self):
+        content = """--- 3.7
+
+a
+
+--- 3.6
+
+b
+"""
+        doc = parse(content)
+
+        issues = doc.validate()
+        assert any(i.kind == "out_of_order" and i.label == "3.6" for i in issues)
+        assert not doc.is_valid
+
+    def test_mixed_depth_is_warning_not_invalid(self):
+        content = """--- 1.1
+
+a
+
+--- 1.2
+
+b
+
+--- 1.2.1
+
+c
+"""
+        doc = parse(content)
+
+        issues = doc.validate()
+        mixed = [i for i in issues if i.kind == "mixed_depth"]
+        assert len(mixed) == 1
+        assert mixed[0].label == "1.2.1"
+        assert mixed[0].severity == "warning"
+        # A warning alone does not make the document invalid.
+        assert doc.is_valid
+
+    def test_named_sections_do_not_trigger_order_or_depth(self):
+        content = """--- prooemium
+
+a
+
+--- epilogue
+
+b
+"""
+        doc = parse(content)
+
+        assert doc.validate() == []
+        assert doc.is_valid
+
+    def test_speaker_roster_matches_usage(self):
+        content = """---
+work: Test
+speakers: [Alpha, Beta]
+---
+
+@Alpha: salve
+@Beta: et tu
+"""
+        doc = parse(content)
+
+        assert doc.validate() == []
+        assert doc.is_valid
+
+    def test_unknown_speaker_is_error(self):
+        content = """---
+work: Test
+speakers: [Alpha, Beta]
+---
+
+@Alpha: salve
+@Gamma: quis sum?
+"""
+        doc = parse(content)
+
+        issues = doc.validate()
+        assert any(
+            i.kind == "unknown_speaker" and i.label == "Gamma" for i in issues
+        )
+        assert not doc.is_valid
+
+    def test_unused_speaker_is_warning(self):
+        content = """---
+work: Test
+speakers: [Alpha, Beta]
+---
+
+@Alpha: solus loquor
+"""
+        doc = parse(content)
+
+        issues = doc.validate()
+        unused = [i for i in issues if i.kind == "unused_speaker"]
+        assert len(unused) == 1
+        assert unused[0].label == "Beta"
+        assert unused[0].severity == "warning"
+        # A warning alone does not make the document invalid.
+        assert doc.is_valid
+
+    def test_no_roster_means_no_speaker_checks(self):
+        # Speakers used but no roster declared (the Dulcitius case): not flagged.
+        content = """---
+work: Test
+---
+
+@Alpha: salve
+@Beta: et tu
+"""
+        doc = parse(content)
+
+        assert not any(
+            i.kind in ("unknown_speaker", "unused_speaker") for i in doc.validate()
+        )
+        assert doc.is_valid
+
+
 class TestMetadataExtras:
     """Tests for extra metadata fields."""
 

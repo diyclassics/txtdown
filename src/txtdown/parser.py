@@ -330,8 +330,11 @@ def _make_section(
             else:
                 lines.append(Line(text=text, number=number, label=label))
 
-    # Determine if ID is numeric
-    is_numbered = section_id.isdigit()
+    # A label is numeric if it is a single integer or a dotted hierarchy of
+    # integers ("1", "3.7", "1.2.3"). Chapter/levels are derived from the id on
+    # the Section itself, so nothing extra needs to be passed here.
+    parts = section_id.split(".")
+    is_numbered = bool(section_id) and all(part.isdigit() for part in parts)
 
     return Section(
         id=section_id,
