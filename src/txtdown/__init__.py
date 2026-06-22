@@ -12,14 +12,15 @@ Example usage:
     exorata meis illum Cytherea Camenis
 """
 
-from .models import Document, Line, Metadata, Section
+from .models import Document, Issue, Line, Metadata, Section
 from .parser import parse
 from .writer import write
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Document",
+    "Issue",
     "Line",
     "Metadata",
     "Section",

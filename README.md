@@ -74,6 +74,41 @@ etc.
 - Explicit section ID: `--- prooemium` or `--- 1a`
 - Section with title: `--- prooemium: Introduction`
 
+#### Hierarchical section ids
+
+- A section id may be a dotted hierarchy of Arabic integers at **any depth**: `--- 3.7`
+  (chapter.section), `--- 1.2.3` (e.g. book.chapter.section), etc.
+- The full label is the `id` (`section.id == "3.7"`). Derived, read-only properties expose
+  the structure:
+  - `section.levels` — the integer components as a tuple (`(3, 7)`; `(1, 2, 3)`;
+    `(1,)` for a flat `1`). `None` for named/non-numeric ids (`prooemium`, `1a`).
+  - `section.chapter` — the first level, but only for ids with **two or more** levels
+    (`"3.7"` → `3`). A flat `"1"` is a section, not a chapter, so it reports `None`.
+- This matches Perseus CTS passage references (`...:3.7`) directly, so txtdown labels
+  round-trip to/from CTS without a crosswalk.
+- A title still works: `--- 3.7: De Senectute` parses to `id="3.7"`, `title="De Senectute"`.
+- **Citation:** a section-id match takes precedence over the section.line reading, so a
+  hierarchical section is cited `doc.get("3.7")` and a line within it is cited
+  `doc.get("3.7.2")` (label.line). In a non-hierarchical document, `doc.get("2.3")`
+  continues to mean section 2, line 3.
+
+#### Validating the hierarchy
+
+Parsing is always permissive — any well-formed label is accepted. Structural checks are
+opt-in and non-raising:
+
+```python
+for issue in doc.validate():           # [] when clean
+    print(issue.severity, issue.kind, issue.message)
+
+if not doc.is_valid:                    # True unless there are *error*-severity issues
+    ...
+```
+
+`validate()` reports every problem at once. It flags **duplicate labels** and
+**out-of-order** labels as errors, and **mixed depth** (a stray `3.7.1` among `N.M`
+labels) as a warning. It deliberately does *not* flag gaps (`3.6` → `3.8`) to allow for lacunae, partial text editions, etc.
+
 ### Lines (for verse)
 
 - Lines auto-number within each section (1, 2, 3...)
@@ -109,6 +144,22 @@ for line in doc.sections[0].lines:
 ```
 
 Non-speaker lines (stage directions, prose) have `line.speaker = None`. Speaker markup round-trips through `write()`.
+
+**Declaring the cast (optional).** A `speakers` list in the front matter records the cast
+of a dialogue:
+
+```
+---
+work: Laelius de Amicitia
+speakers: [Fannius, Scaevola, Laelius]
+---
+```
+
+It is kept in `doc.metadata.extras["speakers"]` (a convention, like `genre` or `mode`, not
+a typed field). When a roster is present, `doc.validate()` cross-checks it against the
+`@Speaker:` names actually used: a used-but-undeclared name is an `unknown_speaker` error
+(catches typos like `@Fanius:`), and a declared-but-unused name is an `unused_speaker`
+warning. Files that don't declare a roster are not checked.
 
 ### Cross-source Quotation
 

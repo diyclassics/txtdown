@@ -1,5 +1,6 @@
 """Data models for txtdown documents."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -82,19 +83,49 @@ class Section:
     Attributes:
         id: Section identifier (number or name)
         lines: List of lines in this section
-        is_numbered: Whether the ID is a number (vs. a name)
+        is_numbered: Whether the ID is numeric (a single integer or a dotted
+            hierarchy of integers) vs. a name
         title: Optional section title
         metadata: Section-specific metadata (supersedes document metadata)
 
     Note:
         Indexing with [] uses 1-based indexing to match scholarly citations.
         Use section[1] for the first line, not section[0].
+
+        ``levels`` and ``chapter`` are derived from ``id`` (the source of truth),
+        so a hierarchical id like ``"3.7"`` always reports ``levels == (3, 7)``
+        and ``chapter == 3`` without any extra bookkeeping.
     """
     id: str
     lines: list[Line] = field(default_factory=list)
     is_numbered: bool = True
     title: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def levels(self) -> tuple[int, ...] | None:
+        """Integer components of a purely numeric, dot-separated id.
+
+        ``"1"`` -> ``(1,)``; ``"3.7"`` -> ``(3, 7)``; ``"1.2.3"`` -> ``(1, 2, 3)``.
+        ``None`` for named or otherwise non-numeric ids (``"prooemium"``,
+        ``"1a"``, malformed ``"3."``). Any depth is supported.
+        """
+        parts = self.id.split(".")
+        if self.id and all(part.isdigit() for part in parts):
+            return tuple(int(part) for part in parts)
+        return None
+
+    @property
+    def chapter(self) -> int | None:
+        """First hierarchy level of a compound id, or ``None``.
+
+        For a ``chapter.section`` text this is the chapter (id ``"3.7"`` -> 3).
+        Only defined for ids with two or more levels: a flat section such as
+        ``"1"`` is a section, not a chapter, so it reports ``None``. At depths
+        other than two the first level may name a different unit (e.g. a book).
+        """
+        levels = self.levels
+        return levels[0] if levels is not None and len(levels) >= 2 else None
 
     @property
     def text(self) -> str:
@@ -109,6 +140,25 @@ class Section:
         if index < 1 or index > len(self.lines):
             raise IndexError(f"Line {index} out of range (1-{len(self.lines)})")
         return self.lines[index - 1]
+
+
+@dataclass
+class Issue:
+    """A structural problem reported by ``Document.validate()``.
+
+    Attributes:
+        kind: Machine-readable category — one of ``"duplicate_label"``,
+            ``"out_of_order"``, ``"mixed_depth"``, ``"unknown_speaker"``,
+            ``"unused_speaker"``.
+        severity: ``"error"`` (breaks lookup / almost certainly a mistake) or
+            ``"warning"`` (suspicious but sometimes legitimate).
+        message: Human-readable explanation.
+        label: The offending section id or speaker name, when applicable.
+    """
+    kind: str
+    severity: str
+    message: str
+    label: str | None = None
 
 
 @dataclass
@@ -131,32 +181,51 @@ class Document:
         """Retrieve content by citation.
 
         Args:
-            citation: Citation string like "2" (section) or "2.3" (section.line)
+            citation: Citation string like "2" (section), "2.3" (section.line),
+                or "3.7" / "3.7.2" when section ids are compound ``chapter.section``
+                labels (section, then section.line).
 
         Returns:
-            Section if single-level citation, Line if two-level
+            Section if the citation resolves to a whole section, Line otherwise.
 
         Raises:
             KeyError: If section or line not found
+
+        Note:
+            A section-id match takes precedence over the section.line reading.
+            The longest dotted prefix that names an existing section wins, so a
+            compound id like "3.7" resolves to that section while "3.7.2" resolves
+            to its line 2. In a non-compound document, "2.3" still falls back to
+            section "2", line 3.
         """
         parts = citation.split(".")
 
-        # Find section
-        section_id = parts[0]
+        # Find the section by longest dotted prefix that matches a section id.
+        # This lets compound ids ("3.7") win over the section.line interpretation
+        # while staying backward compatible for flat ids ("2.3" -> section 2, line 3).
         section = None
-        for s in self.sections:
-            if s.id == section_id:
-                section = s
+        consumed = 0
+        for n in range(len(parts), 0, -1):
+            candidate = ".".join(parts[:n])
+            for s in self.sections:
+                if s.id == candidate:
+                    section = s
+                    consumed = n
+                    break
+            if section is not None:
                 break
 
         if section is None:
-            raise KeyError(f"Section '{section_id}' not found")
+            raise KeyError(f"Section '{parts[0]}' not found")
+
+        remainder = parts[consumed:]
 
         # Return section or line
-        if len(parts) == 1:
+        if not remainder:
             return section
 
-        line_ref = parts[1]
+        line_ref = remainder[0]
+        section_id = section.id
 
         # Try label lookup first (handles "983a" etc.)
         for line in section.lines:
@@ -170,6 +239,123 @@ class Document:
         except (ValueError, IndexError) as e:
             msg = f"Line '{line_ref}' not found in section '{section_id}'"
             raise KeyError(msg) from e
+
+    def validate(self) -> list["Issue"]:
+        """Check the section hierarchy for structural problems.
+
+        Opt-in and non-raising: parsing stays permissive, and this reports
+        *all* problems at once so a caller can decide what to do (warn, raise,
+        ignore). An empty list means the hierarchy is clean.
+
+        Section-hierarchy checks (numeric labels only, except duplicates):
+
+        - ``duplicate_label`` (error): the same label appears twice. Only the
+          first is reachable via :meth:`get`, so the rest silently shadow.
+        - ``out_of_order`` (error): a numeric label sorts before its
+          predecessor in document order (component-wise on ``levels``).
+        - ``mixed_depth`` (warning): a numeric label whose depth differs from
+          the most common depth (a stray ``3.7.1`` among ``N.M`` labels). A
+          warning, not an error — e.g. a depth-1 prologue beside depth-2
+          chapters can be intentional.
+
+        Speaker checks (only when a ``speakers`` roster is declared in the
+        front matter; the roster lives in ``metadata.extras["speakers"]``):
+
+        - ``unknown_speaker`` (error): an ``@Speaker:`` name used in the body
+          that is not in the declared roster — catches typos.
+        - ``unused_speaker`` (warning): a declared speaker that never speaks in
+          this file. A warning, not an error — a partial-``scope`` file may
+          legitimately omit some of the cast.
+        """
+        issues: list[Issue] = []
+
+        # Duplicate labels (applies to every id, named or numeric).
+        seen: set[str] = set()
+        for s in self.sections:
+            if s.id in seen:
+                issues.append(
+                    Issue(
+                        "duplicate_label",
+                        "error",
+                        f"Duplicate section label '{s.id}'; only the first is "
+                        "reachable via get().",
+                        s.id,
+                    )
+                )
+            seen.add(s.id)
+
+        numeric = [s for s in self.sections if s.levels is not None]
+
+        # Out-of-order numeric labels (document order vs. component order).
+        prev = None
+        for s in numeric:
+            if prev is not None and s.levels < prev.levels:
+                issues.append(
+                    Issue(
+                        "out_of_order",
+                        "error",
+                        f"Section '{s.id}' is out of order (follows '{prev.id}').",
+                        s.id,
+                    )
+                )
+            prev = s
+
+        # Mixed depth: flag labels that deviate from the most common depth.
+        if numeric:
+            modal_depth = Counter(len(s.levels) for s in numeric).most_common(1)[0][0]
+            for s in numeric:
+                if len(s.levels) != modal_depth:
+                    issues.append(
+                        Issue(
+                            "mixed_depth",
+                            "warning",
+                            f"Section '{s.id}' has depth {len(s.levels)}, but most "
+                            f"sections have depth {modal_depth}.",
+                            s.id,
+                        )
+                    )
+
+        # Speaker roster consistency, only when a roster is declared.
+        roster = self.metadata.extras.get("speakers")
+        if isinstance(roster, list):
+            declared = set(roster)
+            used = {
+                line.speaker
+                for s in self.sections
+                for line in s.lines
+                if line.speaker
+            }
+            for name in sorted(used - declared):
+                issues.append(
+                    Issue(
+                        "unknown_speaker",
+                        "error",
+                        f"Speaker '{name}' is used (@{name}:) but not in the "
+                        "declared 'speakers' roster.",
+                        name,
+                    )
+                )
+            for name in dict.fromkeys(roster):  # declared order, de-duplicated
+                if name not in used:
+                    issues.append(
+                        Issue(
+                            "unused_speaker",
+                            "warning",
+                            f"Speaker '{name}' is declared but never speaks in "
+                            "this file.",
+                            name,
+                        )
+                    )
+
+        return issues
+
+    @property
+    def is_valid(self) -> bool:
+        """True when :meth:`validate` finds no error-severity issues.
+
+        Warnings (e.g. ``mixed_depth``) do not make a document invalid.
+        """
+        return not any(i.severity == "error" for i in self.validate())
 
     def __len__(self) -> int:
         return len(self.sections)

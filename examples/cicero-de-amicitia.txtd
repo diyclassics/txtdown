@@ -1,13 +1,19 @@
 ---
 author: Marcus Tullius Cicero
+author_wikidata: https://www.wikidata.org/wiki/
 work: Laelius de Amicitia
+work_short: De Amicitia
+work_wikidata: https://www.wikidata.org/wiki/Q675210
 scope: complete
-source: https://thelatinlibrary.com/cicero/amic.txt
 mode: prose
-date: -44
 language: la
 genre: philosophy
+date: -44
 century: -1
+speakers: [Fannius, Scaevola, Laelius]
+source: https://thelatinlibrary.com/cicero/amic.txt
+tess_source: cicero.de_amicitia.tess
+note: "Dialogue speakers marked with @Name: so the parser strips the label from line.text (clean text for NLP); sections 1-5 are Cicero's authorial preface and carry no speaker."
 ---
 
 --- 1

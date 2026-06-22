@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-22
+
+### Added
+- **Hierarchical numeric section ids at any depth.** A section id may be a dotted
+  hierarchy of Arabic integers — `--- 3.7` (chapter.section), `--- 1.2.3`
+  (book.chapter.section), etc. The full label is `Section.id` (`"3.7"`), and two derived,
+  read-only properties expose the structure: `Section.levels` (`(3, 7)`) and
+  `Section.chapter` (the first level, for ids of depth ≥ 2). Dotted labels match Perseus
+  CTS passage references (`...:3.7`) directly. Titles still work (`--- 3.7: De Senectute`),
+  and the form round-trips through `write()`.
+- **Hierarchy-aware citations.** `Document.get()` now matches the longest dotted prefix
+  that names a section, so a section-id match takes precedence over the section.line
+  reading: `doc.get("3.7")` returns the section and `doc.get("3.7.2")` returns its line 2.
+  Non-hierarchical documents are unaffected — `doc.get("2.3")` still means section 2, line 3.
+- **Opt-in structural validation.** `Document.validate()` returns a list of `Issue`
+  objects (empty when clean) without raising; `Document.is_valid` is True unless there are
+  error-severity issues. Section-hierarchy checks: duplicate labels and out-of-order
+  labels (errors), and mixed depth (warning). Gaps between labels are intentionally not
+  flagged (lacunae are normal). Speaker checks (only when a `speakers` roster is declared
+  in the front matter): `unknown_speaker` (error) for an `@Speaker:` name not in the
+  roster, and `unused_speaker` (warning) for a declared speaker that never speaks in the
+  file. `Issue` is exported from the package.
+
 ## [0.2.0] - 2026-06-20
 
 First public release.
