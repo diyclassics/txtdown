@@ -100,10 +100,13 @@ class TestQuoteStyleConsistency:
 class TestQuoteEdgeCases:
     def test_nested_quotes_pass_through(self):
         # Single-depth validation: nested '…' inside "…" is not examined.
+        # (Adapted from the normalized Aeneid 5: Cassandra's words quoted
+        # within a speech.)
         doc = parse(
             "--- 1\n"
-            'ardentis dare visa faces: "hic quaerite Troiam;\n'
-            "hic domus est' inquit 'vobis.\" iam tempus agi res,\n".replace('"', '"')
+            'nam mihi Cassandrae per somnum vatis imago\n'
+            "ardentis dare visa faces: \"hic quaerite Troiam;\n"
+            "hic domus est' inquit 'vobis.\" iam tempus agi res,\n"
         )
         # outer "…" closes; inner '…' ignored while the outer span is open
         assert kinds(doc) == []
