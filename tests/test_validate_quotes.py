@@ -77,7 +77,9 @@ class TestQuoteStyleConsistency:
         )
         assert doc.validate() == []
 
-    def test_mixed_styles_is_error(self):
+    def test_mixed_styles_is_warning(self):
+        # Warning, not error: quoted formulae ('uti rogas') are a different
+        # function from direct speech and may legitimately use another style.
         doc = parse(
             "--- 1\n"
             'prior inquit: "prima oratio."\n'
@@ -85,8 +87,9 @@ class TestQuoteStyleConsistency:
         )
         issues = [i for i in doc.validate() if i.kind == "quote_style_mismatch"]
         assert len(issues) == 1
-        assert issues[0].severity == "error"
+        assert issues[0].severity == "warning"
         assert '"' in issues[0].message and "'" in issues[0].message
+        assert doc.is_valid
 
     def test_no_speech_at_all_clean(self):
         doc = parse(
@@ -176,7 +179,21 @@ class TestQuoteEdgeCases:
             "--- 1\n"
             'plain narration ends oddly" and continues\n'
         )
+        issues = doc.validate()
         assert kinds(doc) == ["unmatched_quote"]
+        assert issues[0].severity == "error"
+
+    def test_stray_single_closer_is_warning_for_elision(self):
+        # satin' = satisne elided (Livy 30.29) — indistinguishable from a
+        # closing quote, so it warns rather than errors.
+        doc = parse(
+            "--- 1\n"
+            "percunctatusque, satin' per commodum omnia explorassent.\n"
+        )
+        issues = doc.validate()
+        assert kinds(doc) == ["unmatched_quote"]
+        assert issues[0].severity == "warning"
+        assert doc.is_valid
 
     def test_multiple_speeches_last_unclosed_reports_its_own_line(self):
         doc = parse(

@@ -315,17 +315,24 @@ class Document:
         ``@Speaker:`` dialogue lines and ``>`` cross-source quotation lines
         are excluded):
 
-        - ``unmatched_quote`` (error): a speech quote is opened but never
-          closed with its matching character; a close-only character
-          (``»``, ``›``, ``”``) appears with no span open; or a symmetric
-          quote (``"``, ``'``) appears in a context inconsistent with its
-          expected role — an opening-shaped quote while a span is already
-          open (a paragraph-resumption quote or missing close), or a
-          closing-shaped quote with nothing open. Pairs are matched across
-          line boundaries — speeches span multiple lines.
-        - ``quote_style_mismatch`` (error): more than one quote style is used
-          for primary direct speech in the same document (e.g. both ``"…"``
-          and ``'…'``). The CRAWL/LatinCy standard is one style per document.
+        - ``unmatched_quote``: a speech quote is opened but never closed
+          with its matching character; a close-only character (``»``, ``›``,
+          ``”``) appears with no span open; or a symmetric quote (``"``,
+          ``'``) appears in a context inconsistent with its expected role —
+          an opening-shaped quote while a span is already open (a
+          paragraph-resumption quote or missing close), or a closing-shaped
+          quote with nothing open. Pairs are matched across line boundaries
+          — speeches span multiple lines. Severity is ``"error"`` except for
+          a closing-shaped stray ``'``, which is a ``"warning"``: word-final
+          elision (``satin'``, ``viden'``) is indistinguishable from a
+          closing quote.
+        - ``quote_style_mismatch`` (warning): more than one quote style is
+          used at the primary level in the same document (e.g. both ``"…"``
+          and ``'…'``). The CRAWL/LatinCy standard is one style per document
+          for direct speech, but quoted formulae or titles (``de pace 'uti
+          rogas'``) are a different function the validator cannot
+          distinguish, so this needs human review rather than failing the
+          document.
 
         Nesting is out of scope for now (single-depth): while a span is open,
         only its own closing character is significant, so nested quotes of a
@@ -465,13 +472,16 @@ class Document:
                     elif ch in _QUOTE_PAIRS:
                         if ch in _SYMMETRIC and not opener_shaped \
                                 and prev != ":":
+                            # A stray closing-shaped ' may be word-final
+                            # elision (satin', viden') — warn, don't error.
                             issues.append(
                                 Issue(
                                     "unmatched_quote",
-                                    "error",
+                                    "warning" if ch == "'" else "error",
                                     f"Closing-shaped quote {ch!r} at section "
                                     f"'{section.id}', line {line.number} has "
-                                    "no matching opening quote.",
+                                    "no matching opening quote (or word-final "
+                                    "elision).",
                                     f"{section.id}.{line.number}",
                                 )
                             )
@@ -511,9 +521,10 @@ class Document:
             issues.append(
                 Issue(
                     "quote_style_mismatch",
-                    "error",
-                    f"Document mixes {len(styles_used)} direct-speech quote "
-                    f"styles: {listing}. Use one style per document.",
+                    "warning",
+                    f"Document mixes {len(styles_used)} primary quote "
+                    f"styles: {listing}. One style per document for direct "
+                    "speech; quoted formulae or titles may be legitimate.",
                 )
             )
 
