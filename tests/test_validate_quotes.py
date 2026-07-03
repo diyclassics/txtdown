@@ -142,6 +142,18 @@ class TestQuoteEdgeCases:
         )
         assert doc.validate() == []
 
+    def test_close_directly_after_colon_is_a_close(self):
+        # Lucan 7: "uictoria nobis plena, uiri:" dixit "superest…" — the
+        # quote right after the colon closes the span (an introducer colon
+        # always has whitespace before the quote).
+        doc = parse(
+            "--- 1\n"
+            'in praedam ducendus erat. "uictoria nobis\n'
+            'plena, uiri:" dixit "superest pro sanguine merces,\n'
+            'quam monstrare meum est."\n'
+        )
+        assert doc.validate() == []
+
     def test_resumption_quote_is_caught(self):
         # Traditional typography re-opens a multi-paragraph speech with a
         # quote at each paragraph without closing the previous one. Blind

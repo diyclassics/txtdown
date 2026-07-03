@@ -184,8 +184,14 @@ _CLOSE_ONLY = frozenset("»›”")
 # start-of-line, whitespace, or an introducer character; a closer follows a
 # word or punctuation character. Blind toggling would silently absorb
 # resumption quotes and misplaced closers.
+#
+# The colon is deliberately absent: a speech-introducer colon always has
+# whitespace before the quote (dixit: "…), while a quote directly after a
+# colon ("plena, uiri:" dixit) closes a span that ends in a colon. A bare
+# colon-before-quote therefore only counts as opener context when no span
+# is open (see the closed-state check below).
 _SYMMETRIC = frozenset("\"'")
-_OPENER_PREV = frozenset(" \t:(—–-")
+_OPENER_PREV = frozenset(" \t(—–-")
 
 # Human-readable style names keyed by opening character.
 _STYLE_NAMES = {
@@ -457,7 +463,8 @@ class Document:
                         # Anything else — including nested quotes of another
                         # style — is not significant at depth 1.
                     elif ch in _QUOTE_PAIRS:
-                        if ch in _SYMMETRIC and not opener_shaped:
+                        if ch in _SYMMETRIC and not opener_shaped \
+                                and prev != ":":
                             issues.append(
                                 Issue(
                                     "unmatched_quote",
