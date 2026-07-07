@@ -81,7 +81,7 @@ def _parse_content(content: str, strict: bool = True) -> Document:
     lines = content.split("\n")
 
     # Extract front matter (body_start > 0 only when a closed block was found)
-    metadata, body_start = _parse_front_matter(lines)
+    metadata, body_start, yaml_error = _parse_front_matter(lines)
     had_front_matter = body_start > 0
 
     # Parse body into sections
@@ -90,13 +90,23 @@ def _parse_content(content: str, strict: bool = True) -> Document:
     doc = Document(metadata=metadata, sections=sections)
 
     if strict:
-        _validate(doc, had_front_matter)
+        _validate(doc, had_front_matter, yaml_error)
+    elif yaml_error is not None:
+        warnings.warn(f"Failed to parse YAML front matter: {yaml_error}", stacklevel=3)
 
     return doc
 
 
-def _validate(doc: Document, had_front_matter: bool) -> None:
+def _validate(doc: Document, had_front_matter: bool,
+              yaml_error: Exception | None = None) -> None:
     """Enforce the required document structure in strict mode."""
+    if yaml_error is not None:
+        # Name the real cause. Swallowing this used to fall through to the
+        # misleading "requires a 'work' field" below even when the field was
+        # present but the YAML itself was broken.
+        raise ValueError(
+            f"front matter YAML failed to parse: {yaml_error}"
+        ) from yaml_error
     if not had_front_matter:
         raise ValueError(
             "txtdown requires a YAML front matter block (--- ... ---). "
@@ -109,11 +119,13 @@ def _validate(doc: Document, had_front_matter: bool) -> None:
         )
 
 
-def _parse_front_matter(lines: list[str]) -> tuple[Metadata, int]:
+def _parse_front_matter(lines: list[str]) -> tuple[Metadata, int, Exception | None]:
     """Parse YAML front matter.
 
     Returns:
-        Tuple of (Metadata, index of first body line)
+        Tuple of (Metadata, index of first body line, YAML error or None).
+        On a YAML error the metadata is empty and the error is carried back so
+        strict mode can raise it as the real cause (non-strict callers warn).
     """
     # Find opening ---
     start = 0
@@ -121,7 +133,7 @@ def _parse_front_matter(lines: list[str]) -> tuple[Metadata, int]:
         start += 1
 
     if start >= len(lines) or lines[start].strip() != "---":
-        return Metadata(), 0
+        return Metadata(), 0, None
 
     # Find closing ---
     end = start + 1
@@ -133,17 +145,21 @@ def _parse_front_matter(lines: list[str]) -> tuple[Metadata, int]:
 
     if end >= len(lines):
         # No closing delimiter - treat as no front matter
-        return Metadata(), 0
+        return Metadata(), 0, None
 
     # Parse YAML
     yaml_content = "\n".join(lines[start + 1 : end])
     try:
         data = yaml.safe_load(yaml_content) or {}
     except yaml.YAMLError as e:
-        warnings.warn(f"Failed to parse YAML front matter: {e}", stacklevel=3)
-        data = {}
+        # Point the error at the file, not the extracted block: YAML marks are
+        # 0-based within yaml_content, which begins at file line start + 2 (1-based).
+        mark = getattr(e, "problem_mark", None)
+        if mark is not None:
+            e = yaml.YAMLError(f"{e} (file line {mark.line + start + 2})")
+        return Metadata(), end + 1, e
 
-    return Metadata.from_dict(data), end + 1
+    return Metadata.from_dict(data), end + 1, None
 
 
 def _parse_section_header(header: str) -> tuple[str | None, str | None]:
