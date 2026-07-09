@@ -1,4 +1,9 @@
-# txtdown
+<img src="https://raw.githubusercontent.com/diyclassics/txtdown/main/assets/txtdown-logo.jpg" alt="txtdown" width="400">
+
+[![PyPI version](https://img.shields.io/pypi/v/txtdown.svg)](https://pypi.org/project/txtdown/)
+[![Python versions](https://img.shields.io/pypi/pyversions/txtdown.svg)](https://pypi.org/project/txtdown/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 Minimal markup for Latin text collections using human-readable markup with inferrable hierarchical structure for scholarly citation.
 
