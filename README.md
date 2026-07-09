@@ -198,6 +198,41 @@ Non-quote lines have `line.is_quote = False`. Quotation markup round-trips throu
 See `examples/cicero-de-amicitia.txtd` (Cicero quoting Ennius and Terence) and
 `examples/augustine-civ-dei-1.2.txtd` (Augustine quoting Virgil).
 
+### Direct Speech
+
+Inline direct speech in running narrative is written with ordinary quotation marks —
+no special marker. This is distinct from `@Speaker:` dialogue lines (drama) and from `>`
+cross-source quotation (verbatim quotes of *other* works):
+
+```
+Aeolus haec contra: "Tuus, O regina, quid optes
+explorare labor; mihi iussa capessere fas est.
+Tu mihi, quodcumque hoc regni, tu sceptra Iovemque
+concilias, tu das epulis accumbere divom,
+nimborumque facis tempestatumque potentem."
+```
+
+The parser passes quote characters through to `line.text` unchanged — this is a
+validation-only feature. Quote **style is permissible**: any matched pair is valid
+(`"…"`, `'…'`, `"…"`, `«…»`, `„…"`, `‹…›`). The internal CRAWL/LatinCy standard is a
+colon speech-introducer with double curly quotes `"…"` (or straight `"…"`).
+
+`doc.validate()` enforces two rules (both scoped to inline speech; `@Speaker:` and `>`
+lines are excluded):
+
+- **`unmatched_quote`** — a speech quote is opened but never closed, a close-only
+  character (`»`, `›`, `"`) appears with no span open, or a symmetric quote (`"`, `'`)
+  appears in a role-inconsistent context. Pairs are matched across line boundaries, so a
+  speech may span many lines. A stray closing-shaped `'` is a *warning*, not an error:
+  word-final elision (`satin'`, `viden'`) is indistinguishable from a closing quote.
+- **`quote_style_mismatch`** (warning) — more than one primary quote style is used in the
+  same document. One style per document is the standard for direct speech, but quoted
+  formulae or titles (`de pace 'uti rogas'`) are a different function the validator can't
+  distinguish, so this is flagged for human review rather than failing the document.
+
+Nesting is out of scope (single depth): while a span is open, only its own closing
+character is significant, so a nested quote of another style passes through unexamined.
+
 ### Metadata
 
 | Field | Description |
