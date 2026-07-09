@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-07-09
+
+### Added
+- **Direct-speech quote validation.** `Document.validate()` now checks inline direct
+  speech in running narrative (distinct from `@Speaker:` dialogue lines and `>`
+  cross-source quotation, both of which are excluded). Two new `Issue` kinds:
+  `unmatched_quote` — a speech quote opened but never closed, a close-only character
+  (`»`, `›`, `”`) with no span open, or a symmetric quote (`"`, `'`) in a context
+  inconsistent with its role; pairs are matched across line boundaries so speeches may
+  span multiple lines. A closing-shaped stray `'` is a warning rather than an error,
+  since word-final elision (`satin'`, `viden'`) is indistinguishable from a closing
+  quote. `quote_style_mismatch` (warning) — more than one primary quote style in the
+  same document, which quoted formulae, titles, etc. can legitimately produce, so it 
+  flags for human review rather than failing. Quote style is otherwise permissible: 
+  any matched pair (`"…"`, `'…'`, `«…»`, `„…"`, `‹…›`) is valid.
+
+### Fixed
+- **Strict mode raises the real YAML front-matter error.** A malformed YAML block was
+  swallowed into a warning and empty metadata, so strict `parse()` fell through to the
+  misleading "requires a 'work' field" even when the field was present but the YAML was
+  broken. Strict mode now raises `ValueError` naming the underlying YAML error;
+  non-strict parsing keeps the tolerant warn-and-continue behavior.
+
 ## [0.3.0] - 2026-06-22
 
 ### Added
@@ -53,4 +76,6 @@ First public release.
 - Auto-numbered lines with 1-indexed, citation-based access (`doc.get("2.3")`).
 - Round-trip-safe `parse()` / `write()`.
 
+[0.3.1]: https://github.com/diyclassics/txtdown/releases/tag/v0.3.1
+[0.3.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.3.0
 [0.2.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.2.0

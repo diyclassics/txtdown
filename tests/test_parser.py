@@ -1151,6 +1151,26 @@ class TestStrictValidation:
         with pytest.raises(ValueError, match="work"):
             strict_parse(content)
 
+    def test_broken_yaml_names_the_real_cause(self):
+        """Invalid front-matter YAML raises the YAML error in strict mode — it must
+        NOT fall through to the misleading "requires a 'work' field" (the egeria
+        failure: a quoted scalar followed by trailing content)."""
+        content = ('---\nwork: Itinerarium\n'
+                   'markup: "<text>" = editorial conjecture\n---\n\nText.')
+        with pytest.raises(ValueError, match="YAML") as exc:
+            strict_parse(content)
+        assert "work" in content  # the field IS present; the YAML is what's broken
+        assert "file line 3" in str(exc.value)
+
+    def test_broken_yaml_warns_in_non_strict(self):
+        """strict=False keeps the old tolerant behavior: warn, empty metadata."""
+        content = ('---\nwork: Itinerarium\n'
+                   'markup: "<text>" = editorial conjecture\n---\n\nText.')
+        with pytest.warns(UserWarning, match="YAML"):
+            doc = strict_parse(content, strict=False)
+        assert doc.metadata.work is None
+        assert doc.sections  # body still parsed
+
     def test_empty_string_raises(self):
         """An empty string has no front matter and raises in strict mode."""
         with pytest.raises(ValueError):

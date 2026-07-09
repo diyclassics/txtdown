@@ -149,7 +149,8 @@ class Issue:
     Attributes:
         kind: Machine-readable category — one of ``"duplicate_label"``,
             ``"out_of_order"``, ``"mixed_depth"``, ``"unknown_speaker"``,
-            ``"unused_speaker"``.
+            ``"unused_speaker"``, ``"unmatched_quote"``,
+            ``"quote_style_mismatch"``.
         severity: ``"error"`` (breaks lookup / almost certainly a mistake) or
             ``"warning"`` (suspicious but sometimes legitimate).
         message: Human-readable explanation.
@@ -159,6 +160,49 @@ class Issue:
     severity: str
     message: str
     label: str | None = None
+
+
+# Direct-speech quote pairs: opening character -> set of valid closers.
+# The „…“ (low-9) style accepts either “ or ” as its closer.
+_QUOTE_PAIRS: dict[str, frozenset[str]] = {
+    '"': frozenset('"'),
+    "“": frozenset("”"),   # “ … ”
+    "'": frozenset("'"),
+    "‘": frozenset("’"),   # ‘ … ’
+    "«": frozenset("»"),   # « … »
+    "„": frozenset("“”"),  # „ … “ / „ … ”
+    "‹": frozenset("›"),   # ‹ … ›
+}
+
+# Characters that only ever close a pair. A stray one with no span open is an
+# unmatched quote. U+2019 (’) is deliberately absent: it doubles as the
+# typographic apostrophe, so a stray one is not evidence of a broken pair.
+_CLOSE_ONLY = frozenset("»›”")
+
+# Symmetric quote characters (same char opens and closes). These cannot be
+# paired lexically, so their role is judged from context: an opener follows
+# start-of-line, whitespace, or an introducer character; a closer follows a
+# word or punctuation character. Blind toggling would silently absorb
+# resumption quotes and misplaced closers.
+#
+# The colon is deliberately absent: a speech-introducer colon always has
+# whitespace before the quote (dixit: "…), while a quote directly after a
+# colon ("plena, uiri:" dixit) closes a span that ends in a colon. A bare
+# colon-before-quote therefore only counts as opener context when no span
+# is open (see the closed-state check below).
+_SYMMETRIC = frozenset("\"'")
+_OPENER_PREV = frozenset(" \t(—–-")
+
+# Human-readable style names keyed by opening character.
+_STYLE_NAMES = {
+    '"': '"…"',
+    "“": "“…”",
+    "'": "'…'",
+    "‘": "‘…’",
+    "«": "«…»",
+    "„": "„…“",
+    "‹": "‹…›",
+}
 
 
 @dataclass
@@ -266,6 +310,34 @@ class Document:
         - ``unused_speaker`` (warning): a declared speaker that never speaks in
           this file. A warning, not an error — a partial-``scope`` file may
           legitimately omit some of the cast.
+
+        Direct-speech quote checks (inline speech in running narrative;
+        ``@Speaker:`` dialogue lines and ``>`` cross-source quotation lines
+        are excluded):
+
+        - ``unmatched_quote``: a speech quote is opened but never closed
+          with its matching character; a close-only character (``»``, ``›``,
+          ``”``) appears with no span open; or a symmetric quote (``"``,
+          ``'``) appears in a context inconsistent with its expected role —
+          an opening-shaped quote while a span is already open (a
+          paragraph-resumption quote or missing close), or a closing-shaped
+          quote with nothing open. Pairs are matched across line boundaries
+          — speeches span multiple lines. Severity is ``"error"`` except for
+          a closing-shaped stray ``'``, which is a ``"warning"``: word-final
+          elision (``satin'``, ``viden'``) is indistinguishable from a
+          closing quote.
+        - ``quote_style_mismatch`` (warning): more than one quote style is
+          used at the primary level in the same document (e.g. both ``"…"``
+          and ``'…'``). The CRAWL/LatinCy standard is one style per document
+          for direct speech, but quoted formulae or titles (``de pace 'uti
+          rogas'``) are a different function the validator cannot
+          distinguish, so this needs human review rather than failing the
+          document.
+
+        Nesting is out of scope for now (single-depth): while a span is open,
+        only its own closing character is significant, so nested quotes of a
+        different style pass through unexamined. A ``'`` or ``’`` with letters
+        on both sides is an apostrophe/elision, never a quote.
         """
         issues: list[Issue] = []
 
@@ -346,6 +418,115 @@ class Document:
                             name,
                         )
                     )
+
+        issues.extend(self._validate_quotes())
+
+        return issues
+
+    def _validate_quotes(self) -> list["Issue"]:
+        """Direct-speech quote pairing and style consistency (see validate)."""
+        issues: list[Issue] = []
+        open_style: str | None = None
+        open_at: tuple[str, int] | None = None  # (section id, line number)
+        styles_used: dict[str, tuple[str, int]] = {}  # style -> first location
+
+        for section in self.sections:
+            for line in section.lines:
+                # Inline narrative speech only: skip drama dialogue and
+                # cross-source quotations.
+                if line.speaker or line.is_quote:
+                    continue
+                text = line.text
+                for i, ch in enumerate(text):
+                    # Apostrophe/elision, never a quote: letters on both sides.
+                    if ch in ("'", "’") and 0 < i < len(text) - 1 \
+                            and text[i - 1].isalpha() and text[i + 1].isalpha():
+                        continue
+                    prev = text[i - 1] if i > 0 else None
+                    opener_shaped = prev is None or prev in _OPENER_PREV
+                    if open_style is not None:
+                        if ch in _QUOTE_PAIRS[open_style]:
+                            # A symmetric quote in opener position while its
+                            # own span is open is not a close: it is a
+                            # paragraph-resumption quote or a missing close.
+                            if ch == open_style and ch in _SYMMETRIC \
+                                    and opener_shaped:
+                                issues.append(
+                                    Issue(
+                                        "unmatched_quote",
+                                        "error",
+                                        f"Opening-shaped quote {ch!r} at "
+                                        f"section '{section.id}', line "
+                                        f"{line.number} while the span opened "
+                                        f"at section '{open_at[0]}', line "
+                                        f"{open_at[1]} is still open "
+                                        "(resumption quote or missing close).",
+                                        f"{section.id}.{line.number}",
+                                    )
+                                )
+                            else:
+                                open_style = None
+                                open_at = None
+                        # Anything else — including nested quotes of another
+                        # style — is not significant at depth 1.
+                    elif ch in _QUOTE_PAIRS:
+                        if ch in _SYMMETRIC and not opener_shaped \
+                                and prev != ":":
+                            # A stray closing-shaped ' may be word-final
+                            # elision (satin', viden') — warn, don't error.
+                            issues.append(
+                                Issue(
+                                    "unmatched_quote",
+                                    "warning" if ch == "'" else "error",
+                                    f"Closing-shaped quote {ch!r} at section "
+                                    f"'{section.id}', line {line.number} has "
+                                    "no matching opening quote (or word-final "
+                                    "elision).",
+                                    f"{section.id}.{line.number}",
+                                )
+                            )
+                        else:
+                            open_style = ch
+                            open_at = (section.id, line.number)
+                            styles_used.setdefault(ch, open_at)
+                    elif ch in _CLOSE_ONLY:
+                        issues.append(
+                            Issue(
+                                "unmatched_quote",
+                                "error",
+                                f"Closing quote '{ch}' at section "
+                                f"'{section.id}', line {line.number} has no "
+                                "matching opening quote.",
+                                f"{section.id}.{line.number}",
+                            )
+                        )
+
+        if open_style is not None and open_at is not None:
+            sec_id, line_no = open_at
+            issues.append(
+                Issue(
+                    "unmatched_quote",
+                    "error",
+                    f"Speech quote {_STYLE_NAMES[open_style]} opened at "
+                    f"section '{sec_id}', line {line_no} is never closed.",
+                    f"{sec_id}.{line_no}",
+                )
+            )
+
+        if len(styles_used) > 1:
+            listing = ", ".join(
+                f"{_STYLE_NAMES[s]} (first at section '{loc[0]}', line {loc[1]})"
+                for s, loc in styles_used.items()
+            )
+            issues.append(
+                Issue(
+                    "quote_style_mismatch",
+                    "warning",
+                    f"Document mixes {len(styles_used)} primary quote "
+                    f"styles: {listing}. One style per document for direct "
+                    "speech; quoted formulae or titles may be legitimate.",
+                )
+            )
 
         return issues
 
