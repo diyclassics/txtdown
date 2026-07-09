@@ -16,10 +16,9 @@ All notable changes to this project are documented here. The format is based on
   span multiple lines. A closing-shaped stray `'` is a warning rather than an error,
   since word-final elision (`satin'`, `viden'`) is indistinguishable from a closing
   quote. `quote_style_mismatch` (warning) — more than one primary quote style in the
-  same document, which the CRAWL/LatinCy standard discourages but which quoted formulae
-  or titles can legitimately produce, so it flags for human review rather than failing.
-  Quote style is otherwise permissible: any matched pair (`"…"`, `'…'`, `«…»`, `„…"`,
-  `‹…›`) is valid.
+  same document, which quoted formulae, titles, etc. can legitimately produce, so it 
+  flags for human review rather than failing. Quote style is otherwise permissible: 
+  any matched pair (`"…"`, `'…'`, `«…»`, `„…"`, `‹…›`) is valid.
 
 ### Fixed
 - **Strict mode raises the real YAML front-matter error.** A malformed YAML block was
