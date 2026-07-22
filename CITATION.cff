@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "txtdown: Minimal markup for Latin text collections"
+abstract: >-
+  txtdown is a human-readable plaintext markup format for scholarly
+  collections of Latin (and other classical) texts, with inferrable
+  hierarchical structure for citation, direct-speech and cross-source
+  quotation, and tolerance for inline TEI/XML tags that still yields
+  clean plaintext for NLP.
+type: software
+authors:
+  - given-names: "Patrick J."
+    family-names: Burns
+    orcid: "https://orcid.org/0000-0003-2158-866X"
+repository-code: "https://github.com/diyclassics/txtdown"
+url: "https://github.com/diyclassics/txtdown"
+license: MIT
+version: 0.4.0
+date-released: "2026-07-22"
+keywords:
+  - latin
+  - markup
+  - text
+  - philology
+  - digital-humanities
+  - nlp
+  - tei
