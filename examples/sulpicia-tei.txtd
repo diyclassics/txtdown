@@ -1,0 +1,32 @@
+---
+author: Sulpicia
+work: Epistulae (inline-TEI sample)
+source: https://thelatinlibrary.com/sulpicia.html
+language: la
+mode: verse
+genre: elegy
+---
+
+--- 1
+
+Tandem venit amor, qualem texisse pudori
+    quam nudasse alicui sit mihi fama magis.
+exorata meis illum <persName>Cytherea</persName> Camenis
+    attulit in nostrum deposuitque sinum.
+exsolvit promissa <persName>Venus</persName>: mea gaudia narret,
+    dicetur si quis non habuisse sua.
+non ego signatis quicquam mandare tabellis,
+    ne legat id nemo quam meus ante, velim,
+sed peccasse iuvat, vultus componere famae
+    taedet: cum digno digna fuisse ferar.
+
+--- 2
+
+Invisus natalis adest, qui rure molesto
+    et sine <persName>Cerintho</persName> tristis agendus erit.
+dulcius urbe quid est? an villa sit apta puellae
+    atque <placeName n="pleiades:413032">Arretino</placeName> frigidus amnis agro?
+iam, nimium <persName>Messalla</persName> mei studiose, quiescas,
+    non tempestivae, saeve <propinque>, viae.
+<milestone unit="couplet" n="4"/>hic animum sensusque meos abducta relinquo,
+    arbitrio quamvis non sinis esse meo.

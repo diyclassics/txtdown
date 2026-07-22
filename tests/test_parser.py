@@ -1125,9 +1125,21 @@ class TestParseExamples:
             "cicero-de-amicitia.txtd",
             "augustine-civ-dei-1.2.txtd",
             "sulpicia.txtd",
+            "sulpicia-tei.txtd",
         ):
             doc = parse(self.EXAMPLES_DIR / name)
             assert parse(write(doc)) == doc
+
+    def test_tei_example_strips_clean(self):
+        """The TEI example yields tag-free plaintext with the West supplement
+        kept literal, and validates clean."""
+        doc = parse(self.EXAMPLES_DIR / "sulpicia-tei.txtd")
+        assert "<persName>" not in doc.plain
+        assert "<placeName" not in doc.plain
+        assert "<milestone" not in doc.plain
+        assert "<propinque>" in doc.plain  # West supplement, not a tag
+        assert any(t.attrs.get("n") == "pleiades:413032" for t in doc.tags)
+        assert doc.validate() == []
 
 
 class TestStrictValidation:
@@ -1194,6 +1206,7 @@ class TestStrictValidation:
             "cicero-de-amicitia.txtd",
             "augustine-civ-dei-1.2.txtd",
             "sulpicia.txtd",
+            "sulpicia-tei.txtd",
         ):
             doc = strict_parse(examples_dir / name)  # must not raise
             assert doc.metadata.work
