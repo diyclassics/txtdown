@@ -1126,9 +1126,20 @@ class TestParseExamples:
             "augustine-civ-dei-1.2.txtd",
             "sulpicia.txtd",
             "sulpicia-tei.txtd",
+            "naevius-clastidium.txtd",
         ):
             doc = parse(self.EXAMPLES_DIR / name)
             assert parse(write(doc)) == doc
+
+    def test_naevius_fragment(self):
+        """A fragmentarily-complete work: one surviving line."""
+        doc = parse(self.EXAMPLES_DIR / "naevius-clastidium.txtd")
+        assert doc.metadata.author == "Naevius"
+        assert doc.metadata.work == "Clastidium"
+        assert doc.sections[0].lines[0].text == (
+            "uita insepulta laetus in patriam redux"
+        )
+        assert doc.validate() == []
 
     def test_tei_example_strips_clean(self):
         """The TEI example yields tag-free plaintext with the West supplement
@@ -1207,6 +1218,7 @@ class TestStrictValidation:
             "augustine-civ-dei-1.2.txtd",
             "sulpicia.txtd",
             "sulpicia-tei.txtd",
+            "naevius-clastidium.txtd",
         ):
             doc = strict_parse(examples_dir / name)  # must not raise
             assert doc.metadata.work

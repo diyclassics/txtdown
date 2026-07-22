@@ -36,6 +36,7 @@ single ``<...>`` token may not).
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 # XML-ish element/attribute name, with an optional single namespace prefix.
@@ -52,6 +53,19 @@ _TOKEN_PATTERN = re.compile(
 )
 
 _ATTR_PATTERN = re.compile(rf"({_QNAME})\s*=\s*(\"[^\"<>]*\"|'[^'<>]*')")
+
+# Markdown-style inline link: ``[display](target)``. A ``[`` is a link only
+# when immediately followed by ``](target)`` — a bare ``[verbum]`` (lacuna,
+# editorial bracket) stays literal, mirroring the structural rule for ``<>``.
+# ``display`` excludes brackets/newlines; ``target`` is any run without spaces
+# or parens, i.e. an opaque URI (relative ``path#frag``, ``urn:cts:…``,
+# ``https://…``, …). The target is never resolved or validated.
+_LINK_PATTERN = re.compile(r"\[(?P<display>[^\[\]\n]*)\]\((?P<target>[^()\s]+)\)")
+
+# Tag attributes that carry a link target, in priority order. A resolved tag
+# pair bearing one of these is promoted into the shared Reference view: the
+# TEI equivalent of the Markdown link (``<ref target=…>``, ``<quote corresp=…>``).
+_LINK_ATTRS = ("target", "corresp", "source")
 
 
 @dataclass
@@ -75,6 +89,41 @@ class Tag:
     start: int
     end: int
     self_closing: bool = False
+
+
+@dataclass
+class Reference:
+    """A resolved inline cross-reference — a hyperlink to an opaque target URI.
+
+    Two surface syntaxes compile to this, on the markdown~TEI analogy: the
+    Markdown-style ``[display](target)`` link, and the TEI equivalents
+    ``<ref target="…">display</ref>`` and ``<quote corresp="…">display</quote>``.
+
+    ``target`` is stored verbatim and **never resolved or validated** — it may
+    be a relative ``.txtd`` path with a ``#citation`` fragment, a CTS URN, a
+    URL, or anything else, and it may dangle. Resolving a target against a set
+    of documents is a separate, best-effort concern.
+
+    ``start``/``end`` index into the container's plain text
+    (``plain[start:end] == display``). For an empty pointer (e.g. a
+    self-closing ``<ptr target="…"/>``) ``start == end`` and ``display == ""``.
+
+    Attributes:
+        display: The link text as it appears in plain text (tags within it are
+            already stripped)
+        target: The opaque target URI, verbatim
+        kind: ``"link"`` (Markdown), ``"quote"`` (``<quote>``), or ``"ref"``
+            (``<ref>`` / any other link-bearing tag)
+        syntax: ``"markdown"`` or ``"tei"``
+        start: Offset of ``display`` in the container's plain text
+        end: Offset one past ``display``
+    """
+    display: str
+    target: str
+    kind: str
+    syntax: str
+    start: int
+    end: int
 
 
 @dataclass
@@ -107,6 +156,10 @@ class Resolution:
             plain text) of XML-shaped tokens that stayed literal (unmatched
             opens, malformed end tags). Content inside them — notably quote
             characters in attribute values — is markup-shaped, not prose
+        line_tags/section_tags/document_tags have Reference twins
+        line_refs/section_refs/document_refs at the same three granularities:
+        Markdown ``[X](Y)`` links (always same-line) plus link-bearing tag
+        pairs / self-closing pointers, offsets into the matching plain text
     """
     plain_lines: list[list[str]]
     line_tags: list[list[list[Tag]]]
@@ -118,6 +171,9 @@ class Resolution:
     cross_section: list[tuple[str, tuple[int, int], tuple[int, int]]]
     tag_only_lines: list[tuple[int, int]]
     literal_spans: list[list[list[tuple[int, int]]]]
+    line_refs: list[list[list[Reference]]]
+    section_refs: list[list[Reference]]
+    document_refs: list[Reference]
 
 
 @dataclass
@@ -135,6 +191,20 @@ class _Token:
     pair: "_Token | None" = field(default=None, repr=False)
 
 
+@dataclass
+class _Link:
+    """One Markdown ``[display](target)`` occurrence on a single line."""
+    section: int
+    line: int
+    target: str
+    open_start: int   # raw offset of '['
+    open_end: int     # raw offset just past '['
+    close_start: int  # raw offset of ']'
+    close_end: int    # raw offset just past ')'
+    disp_start: int = -1  # plain offset where display begins
+    disp_end: int = -1    # plain offset where display ends
+
+
 def resolve(section_texts: list[list[str]]) -> Resolution:
     """Resolve inline XML tags across one pairing scope.
 
@@ -148,8 +218,9 @@ def resolve(section_texts: list[list[str]]) -> Resolution:
         section, and document granularity.
     """
     tokens = _scan(section_texts)
+    links = _scan_links(section_texts, tokens)
     pairs, strays, unmatched_opens = _pair(tokens)
-    plain_lines = _strip(section_texts, tokens)
+    plain_lines = _strip(section_texts, tokens, links)
 
     # Plain-offset bases: line within its section ("\n" joins), section
     # within the document ("\n\n" joins).
@@ -202,13 +273,77 @@ def resolve(section_texts: list[list[str]]) -> Resolution:
                         closer.plain_pos)
                 )
 
+    # References: Markdown [X](Y) links and link-bearing tags, at the same
+    # three granularities as tags. display is sliced from the document plain
+    # so one string serves every coordinate frame.
+    section_plains = ["\n".join(row) for row in plain_lines]
+    doc_plain = "\n\n".join(section_plains)
+    line_refs: list[list[list[Reference]]] = [[[] for _ in row] for row in plain_lines]
+    section_refs: list[list[Reference]] = [[] for _ in plain_lines]
+    document_refs: list[Reference] = []
+
+    for lk in links:
+        sec_start = line_bases[lk.section][lk.line] + lk.disp_start
+        sec_end = line_bases[lk.section][lk.line] + lk.disp_end
+        doc_start = section_bases[lk.section] + sec_start
+        doc_end = section_bases[lk.section] + sec_end
+        disp = doc_plain[doc_start:doc_end]
+        line_refs[lk.section][lk.line].append(
+            Reference(disp, lk.target, "link", "markdown", lk.disp_start, lk.disp_end)
+        )
+        section_refs[lk.section].append(
+            Reference(disp, lk.target, "link", "markdown", sec_start, sec_end)
+        )
+        document_refs.append(
+            Reference(disp, lk.target, "link", "markdown", doc_start, doc_end)
+        )
+
+    def _link_target(attrs: dict[str, str]) -> str | None:
+        return next((attrs[a] for a in _LINK_ATTRS if a in attrs), None)
+
+    for tok in tokens:
+        if tok.kind == "selfclose":
+            target = _link_target(tok.attrs)
+            if target is None:
+                continue
+            document_refs.append(
+                Reference("", target, "ref", "tei", doc_pos(tok), doc_pos(tok))
+            )
+            section_refs[tok.section].append(
+                Reference("", target, "ref", "tei", sec_pos(tok), sec_pos(tok))
+            )
+            line_refs[tok.section][tok.line].append(
+                Reference("", target, "ref", "tei", tok.plain_pos, tok.plain_pos)
+            )
+
+    for opener, closer in pairs:
+        target = _link_target(opener.attrs)
+        if target is None:
+            continue
+        kind = "quote" if opener.name == "quote" else "ref"
+        d_start, d_end = doc_pos(opener), doc_pos(closer)
+        disp = doc_plain[d_start:d_end]
+        document_refs.append(Reference(disp, target, kind, "tei", d_start, d_end))
+        if opener.section == closer.section:
+            section_refs[opener.section].append(
+                Reference(disp, target, kind, "tei", sec_pos(opener), sec_pos(closer))
+            )
+            if opener.line == closer.line:
+                line_refs[opener.section][opener.line].append(
+                    Reference(disp, target, kind, "tei",
+                              opener.plain_pos, closer.plain_pos)
+                )
+
     by_span = lambda t: (t.start, t.end)  # noqa: E731
-    document_tags.sort(key=by_span)
-    for tags in section_tags:
-        tags.sort(key=by_span)
-    for row in line_tags:
-        for tags in row:
-            tags.sort(key=by_span)
+    for coll in (document_tags, document_refs):
+        coll.sort(key=by_span)
+    for level in (section_tags, section_refs):
+        for group in level:
+            group.sort(key=by_span)
+    for level in (line_tags, line_refs):
+        for row in level:
+            for group in row:
+                group.sort(key=by_span)
 
     return Resolution(
         plain_lines=plain_lines,
@@ -232,6 +367,9 @@ def resolve(section_texts: list[list[str]]) -> Resolution:
             if not plain.strip() and section_texts[si][li].strip()
         ],
         literal_spans=_literal_spans(plain_lines, tokens),
+        line_refs=line_refs,
+        section_refs=section_refs,
+        document_refs=document_refs,
     )
 
 
@@ -298,16 +436,52 @@ def _pair(
     return pairs, strays, unmatched_opens
 
 
-def _strip(section_texts: list[list[str]],
-           tokens: list[_Token]) -> list[list[str]]:
-    """Remove stripped tokens from each line, recording plain offsets.
+def _scan_links(section_texts: list[list[str]],
+                tokens: list[_Token]) -> list[_Link]:
+    """Find Markdown ``[display](target)`` links, in document order.
 
-    Every token — stripped or literal — gets its ``plain_pos`` set so that
-    the plain-coordinate spans of literal tokens can be reported too.
+    A match that falls inside an XML tag token's raw span (e.g. a ``[x](y)``
+    sitting in an attribute value) is skipped — the tag owns that text.
     """
-    by_line: dict[tuple[int, int], list[_Token]] = {}
+    tag_spans: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
     for tok in tokens:
-        by_line.setdefault((tok.section, tok.line), []).append(tok)
+        tag_spans[(tok.section, tok.line)].append((tok.raw_start, tok.raw_end))
+
+    links: list[_Link] = []
+    for si, line_texts in enumerate(section_texts):
+        for li, text in enumerate(line_texts):
+            spans = tag_spans.get((si, li), [])
+            for m in _LINK_PATTERN.finditer(text):
+                if any(s < m.end() and m.start() < e for s, e in spans):
+                    continue  # inside a tag token
+                close_start = m.start("display") + len(m.group("display"))
+                links.append(
+                    _Link(si, li, m.group("target"),
+                          m.start(), m.start() + 1, close_start, m.end())
+                )
+    return links
+
+
+def _strip(section_texts: list[list[str]],
+           tokens: list[_Token],
+           links: list[_Link]) -> list[list[str]]:
+    """Strip tag tokens and Markdown link syntax from each line in one pass.
+
+    Tag tokens marked ``stripped`` are removed; every tag token (stripped or
+    literal) gets its ``plain_pos`` so literal spans can be reported. Each
+    link's ``[`` and ``](target)`` are removed while its display survives; the
+    link's ``disp_start``/``disp_end`` record where that display lands in the
+    plain text. All edits are applied left-to-right in raw order so offsets
+    stay consistent when tags and links share a line.
+    """
+    # Per line, an ordered work-list of edits: ("tag", token),
+    # ("link_open"/"link_close", link), keyed by raw start.
+    by_line: dict[tuple[int, int], list[tuple[int, str, object]]] = defaultdict(list)
+    for tok in tokens:
+        by_line[(tok.section, tok.line)].append((tok.raw_start, "tag", tok))
+    for lk in links:
+        by_line[(lk.section, lk.line)].append((lk.open_start, "link_open", lk))
+        by_line[(lk.section, lk.line)].append((lk.close_start, "link_close", lk))
 
     plain_lines: list[list[str]] = []
     for si, line_texts in enumerate(section_texts):
@@ -316,12 +490,27 @@ def _strip(section_texts: list[list[str]],
             pieces: list[str] = []
             cursor = 0
             removed = 0
-            for tok in by_line.get((si, li), []):  # already in scan order
-                tok.plain_pos = tok.raw_start - removed
-                if tok.stripped:
-                    pieces.append(text[cursor:tok.raw_start])
-                    removed += tok.raw_end - tok.raw_start
-                    cursor = tok.raw_end
+            for raw_start, kind, payload in sorted(by_line.get((si, li), []),
+                                                   key=lambda e: e[0]):
+                if kind == "tag":
+                    tok = payload
+                    tok.plain_pos = tok.raw_start - removed
+                    if tok.stripped:
+                        pieces.append(text[cursor:tok.raw_start])
+                        removed += tok.raw_end - tok.raw_start
+                        cursor = tok.raw_end
+                elif kind == "link_open":
+                    lk = payload
+                    pieces.append(text[cursor:lk.open_start])
+                    lk.disp_start = lk.open_start - removed
+                    removed += lk.open_end - lk.open_start
+                    cursor = lk.open_end
+                else:  # link_close
+                    lk = payload
+                    pieces.append(text[cursor:lk.close_start])
+                    lk.disp_end = lk.close_start - removed
+                    removed += lk.close_end - lk.close_start
+                    cursor = lk.close_end
             pieces.append(text[cursor:])
             row.append("".join(pieces))
         plain_lines.append(row)
