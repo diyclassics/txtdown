@@ -235,18 +235,18 @@ character is significant, so a nested quote of another style passes through unex
 
 ### Inline TEI/XML Tags
 
-On the markdown~HTML analogy, txtdown tolerates inline TEI/XML markup: valid TEI
-fragments inside a txtdown body parse seamlessly and still yield clean plaintext for
-NLP. txtdown defines no named-entity syntax of its own, but a project that wants one can
-use TEI tags directly (see Berti, Crane & Babeu 2026 on inline TEI for citation
-structure, quotation, and named entities):
+txtdown tolerates inline TEI/XML markup: valid TEI fragments inside a txtdown body parse 
+seamlessly and still yield clean plaintext for NLP. For example, txtdown defines no 
+named-entity syntax  of its own, but a project that wants one can use TEI tags directly 
+(see e.g. Berti, Crane & Babeu 2026 p. 26 on inline TEI for citation structure, quotation, 
+and named entities):
 
 ```
 exorata meis illum <persName>Cytherea</persName> Camenis
     atque <placeName n="pleiades:413032">Arretino</placeName> frigidus amnis agro?
 ```
 
-The parser passes tags through to `line.text` verbatim (like Direct Speech, this is an
+The parser passes tags through to `line.text` verbatim (like direct speech, this is an
 accessor/validation feature — `write()` round-trips them unchanged). Tag-stripped text
 and resolved spans are exposed at every level:
 
@@ -274,8 +274,7 @@ lone unmatched `<word>` stays literal text — a West supplement:
 ```
 
 Here `<propinque>` survives in `.plain` untouched, while the `<persName>` pair above is
-stripped. `†crux†`, `{deletion}`, and `M(arcus)` contain no angle brackets and are never
-affected.
+stripped.
 
 `doc.validate()` adds four tag checks, all **warnings** (a suspicious tag never breaks
 citation lookup): **`unmatched_tag`** (a stray end tag, or an *attribute-bearing* start
@@ -341,10 +340,10 @@ The idea for txtdown originated in January 2018, inspired by the need for a docu
 
 ## References
 
-- Berti, Monica, Gregory R. Crane, and Alison Babeu. 2026. "Philology and Digital Texts." In *The Oxford Handbook of Digital Classical Studies*. Oxford: Oxford University Press. https://academic.oup.com/edited-volume/63135/chapter/56800380
-- DeRose, Steven J., David G. Durand, Elli Mylonas, and Allen H. Renear. 1990. "What Is Text, Really?" *Journal of Computing in Higher Education* 1 (2): 3–26. https://doi.org/10.1007/BF02941632
-- Gruber, John. 2004. *Markdown* (v1.0.1). https://daringfireball.net/projects/markdown/
-- West, Martin L. 1973. *Textual Criticism and Editorial Technique Applicable to Greek and Latin Texts*. Stuttgart: Teubner.
+- Berti, M., Crane, G.R., and Babeu, A. 2026. "Philology and Digital Texts." In Barker, E., Bobou, O., and Raja, R., eds., *The Oxford Handbook of Digital Classical Studies*. Oxford. https://doi.org/10.1093/9780197835210.003.0002
+- DeRose, S.J., Durand, D.G., Mylonas, E., and Renear, A.H. 1990. "What Is Text, Really?" *Journal of Computing in Higher Education* 1 (2): 3–26. https://doi.org/10.1007/BF02941632
+- Gruber, J. 2004. "Markdown" (version 1.0.1). https://daringfireball.net/projects/markdown/
+- West, M.L. 1973. *Textual Criticism and Editorial Technique Applicable to Greek and Latin Texts*. Stuttgart.
 
 ## License
 
