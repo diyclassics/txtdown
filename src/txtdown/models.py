@@ -1,8 +1,11 @@
 """Data models for txtdown documents."""
 
+import functools
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
+
+from .tags import Resolution, Tag, resolve
 
 
 @dataclass
@@ -65,12 +68,58 @@ class Line:
         label: Editorial line label when it differs from number (e.g., "983a")
         is_quote: True if the line is a cross-source quotation (``>`` markup),
             i.e. verbatim text quoted from another author/work
+        section: Back-reference to the containing Section (set automatically;
+            excluded from equality/repr)
+
+    Note:
+        ``text`` keeps any inline TEI/XML markup verbatim; use :attr:`plain`
+        for the tag-stripped text and :attr:`tags` for the resolved spans
+        (see :mod:`txtdown.tags` for what counts as a tag).
     """
     text: str
     number: int
     speaker: str | None = None
     label: str | None = None
     is_quote: bool = False
+    section: "Section | None" = field(default=None, repr=False, compare=False)
+
+    @property
+    def plain(self) -> str:
+        """Line text with inline XML tags stripped (NLP-ready).
+
+        Tag pairing uses the widest reachable scope — the whole document
+        when this line belongs to one, so a span opened here and closed in
+        a later line still strips (structural pairing: a lone unmatched
+        ``<word>`` is a West-style supplement and stays literal).
+        """
+        resolution, si, li = self._tag_view()
+        return resolution.plain_lines[si][li]
+
+    @property
+    def tags(self) -> list[Tag]:
+        """Inline XML tags contained entirely in this line.
+
+        Offsets index into :attr:`plain`. Pairs whose end tag sits on a
+        later line appear in ``Section.tags`` / ``Document.tags`` instead.
+        """
+        resolution, si, li = self._tag_view()
+        return list(resolution.line_tags[si][li])
+
+    def _tag_view(self) -> tuple[Resolution, int, int]:
+        """Tag resolution covering this line, at the widest reachable scope."""
+        section = self.section
+        document = section.document if section is not None else None
+        if document is not None:
+            resolution, _, line_index = document._tag_state
+            coords = line_index.get(id(self))
+            if coords is not None:
+                return resolution, coords[0], coords[1]
+        if section is not None:
+            resolution, line_index = section._tag_state
+            li = line_index.get(id(self))
+            if li is not None:
+                return resolution, 0, li
+        return resolve([[self.text]]), 0, 0
 
     def __str__(self) -> str:
         return self.text
@@ -87,6 +136,8 @@ class Section:
             hierarchy of integers) vs. a name
         title: Optional section title
         metadata: Section-specific metadata (supersedes document metadata)
+        document: Back-reference to the containing Document (set
+            automatically; excluded from equality/repr)
 
     Note:
         Indexing with [] uses 1-based indexing to match scholarly citations.
@@ -101,6 +152,11 @@ class Section:
     is_numbered: bool = True
     title: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    document: "Document | None" = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        for line in self.lines:
+            line.section = self
 
     @property
     def levels(self) -> tuple[int, ...] | None:
@@ -132,6 +188,45 @@ class Section:
         """Return section text as a single string."""
         return "\n".join(line.text for line in self.lines)
 
+    @property
+    def plain(self) -> str:
+        """Section text with inline XML tags stripped (NLP-ready).
+
+        Lines are joined with ``"\\n"``, mirroring :attr:`text`. Tag pairing
+        uses the whole document when this section belongs to one.
+        """
+        resolution, si = self._tag_view()
+        return "\n".join(resolution.plain_lines[si])
+
+    @property
+    def tags(self) -> list[Tag]:
+        """Inline XML tags contained entirely in this section.
+
+        Includes pairs that span lines; offsets index into :attr:`plain`.
+        Pairs crossing into another section appear only in ``Document.tags``.
+        """
+        resolution, si = self._tag_view()
+        return list(resolution.section_tags[si])
+
+    @functools.cached_property
+    def _tag_state(self) -> tuple[Resolution, dict[int, int]]:
+        """Section-scope tag resolution, for sections outside a Document.
+
+        Cached on first access; stale if lines are mutated afterwards
+        (``del section._tag_state`` to recompute).
+        """
+        resolution = resolve([[line.text for line in self.lines]])
+        return resolution, {id(line): li for li, line in enumerate(self.lines)}
+
+    def _tag_view(self) -> tuple[Resolution, int]:
+        """Tag resolution covering this section, at the widest reachable scope."""
+        if self.document is not None:
+            resolution, section_index, _ = self.document._tag_state
+            si = section_index.get(id(self))
+            if si is not None:
+                return resolution, si
+        return self._tag_state[0], 0
+
     def __len__(self) -> int:
         return len(self.lines)
 
@@ -150,7 +245,9 @@ class Issue:
         kind: Machine-readable category — one of ``"duplicate_label"``,
             ``"out_of_order"``, ``"mixed_depth"``, ``"unknown_speaker"``,
             ``"unused_speaker"``, ``"unmatched_quote"``,
-            ``"quote_style_mismatch"``.
+            ``"quote_style_mismatch"``, ``"unmatched_tag"``,
+            ``"tag_overlap"``, ``"tag_crosses_section"``,
+            ``"tag_only_line"``.
         severity: ``"error"`` (breaks lookup / almost certainly a mistake) or
             ``"warning"`` (suspicious but sometimes legitimate).
         message: Human-readable explanation.
@@ -220,6 +317,47 @@ class Document:
     """
     metadata: Metadata = field(default_factory=Metadata)
     sections: list[Section] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        for section in self.sections:
+            section.document = self
+
+    @property
+    def plain(self) -> str:
+        """Document text with inline XML tags stripped (NLP-ready).
+
+        Lines are joined with ``"\\n"`` within a section and sections with
+        ``"\\n\\n"``. See :mod:`txtdown.tags` for what counts as a tag
+        (structural pairing: a lone unmatched ``<word>`` is a West-style
+        supplement and stays literal).
+        """
+        resolution, _, _ = self._tag_state
+        return "\n\n".join("\n".join(row) for row in resolution.plain_lines)
+
+    @property
+    def tags(self) -> list[Tag]:
+        """All resolved inline XML tags, offsets into :attr:`plain`."""
+        return list(self._tag_state[0].document_tags)
+
+    @functools.cached_property
+    def _tag_state(
+        self,
+    ) -> tuple[Resolution, dict[int, int], dict[int, tuple[int, int]]]:
+        """Document-scope tag resolution plus id()-keyed section/line indexes.
+
+        Cached on first access; stale if sections or lines are mutated
+        afterwards (``del document._tag_state`` to recompute).
+        """
+        resolution = resolve(
+            [[line.text for line in s.lines] for s in self.sections]
+        )
+        section_index = {id(s): si for si, s in enumerate(self.sections)}
+        line_index = {
+            id(line): (si, li)
+            for si, s in enumerate(self.sections)
+            for li, line in enumerate(s.lines)
+        }
+        return resolution, section_index, line_index
 
     def get(self, citation: str) -> Line | Section:
         """Retrieve content by citation.
@@ -337,7 +475,26 @@ class Document:
         Nesting is out of scope for now (single-depth): while a span is open,
         only its own closing character is significant, so nested quotes of a
         different style pass through unexamined. A ``'`` or ``’`` with letters
-        on both sides is an apostrophe/elision, never a quote.
+        on both sides is an apostrophe/elision, never a quote. Quote scanning
+        operates on tag-stripped (``plain``) text, so quotes inside XML
+        attribute values (``<placeName n="pleiades:874341">``) are never
+        mistaken for speech.
+
+        Inline XML tag checks (all warnings — a suspicious tag never breaks
+        citation lookup; see :mod:`txtdown.tags` for the pairing rules):
+
+        - ``unmatched_tag``: an end tag with no matching start tag (stripped
+          from plain text anyway), or an attribute-bearing start tag that is
+          never closed (kept as literal text). A *bare* unmatched ``<word>``
+          is never flagged — it is by definition a West-style supplement.
+        - ``tag_overlap``: two tag pairs cross without nesting
+          (``<a><b></a></b>``). Both still strip.
+        - ``tag_crosses_section``: a pair opens in one section and closes in
+          another. Legitimate TEI rarely does this; it usually means a
+          West-style supplement was absorbed by a distant unrelated end tag.
+        - ``tag_only_line``: a line containing only markup (e.g. a lone
+          ``<pb n="2"/>``) still consumes a line number, shifting the
+          numbering of every following line.
         """
         issues: list[Issue] = []
 
@@ -420,6 +577,7 @@ class Document:
                     )
 
         issues.extend(self._validate_quotes())
+        issues.extend(self._validate_tags())
 
         return issues
 
@@ -429,15 +587,23 @@ class Document:
         open_style: str | None = None
         open_at: tuple[str, int] | None = None  # (section id, line number)
         styles_used: dict[str, tuple[str, int]] = {}  # style -> first location
+        resolution = self._tag_state[0]
 
-        for section in self.sections:
-            for line in section.lines:
+        for si, section in enumerate(self.sections):
+            for li, line in enumerate(section.lines):
                 # Inline narrative speech only: skip drama dialogue and
                 # cross-source quotations.
                 if line.speaker or line.is_quote:
                     continue
-                text = line.text
+                # Scan tag-stripped text: quotes inside XML attribute values
+                # are markup, not speech. XML-shaped tokens that stayed
+                # literal (e.g. an unclosed attribute-bearing tag) are
+                # likewise skipped — their quotes are markup-shaped too.
+                text = resolution.plain_lines[si][li]
+                literal_spans = resolution.literal_spans[si][li]
                 for i, ch in enumerate(text):
+                    if any(s <= i < e for s, e in literal_spans):
+                        continue
                     # Apostrophe/elision, never a quote: letters on both sides.
                     if ch in ("'", "’") and 0 < i < len(text) - 1 \
                             and text[i - 1].isalpha() and text[i + 1].isalpha():
@@ -528,6 +694,79 @@ class Document:
                 )
             )
 
+        return issues
+
+    def _validate_tags(self) -> list["Issue"]:
+        """Inline XML tag hygiene (see validate). All warnings."""
+        issues: list[Issue] = []
+        resolution = self._tag_state[0]
+
+        def where(si: int, li: int) -> tuple[str, int]:
+            section = self.sections[si]
+            return section.id, section.lines[li].number
+
+        for name, si, li in resolution.stray_closes:
+            sec_id, num = where(si, li)
+            issues.append(
+                Issue(
+                    "unmatched_tag",
+                    "warning",
+                    f"Closing tag </{name}> at section '{sec_id}', line "
+                    f"{num} has no matching opening tag (stripped from "
+                    "plain text anyway).",
+                    f"{sec_id}.{num}",
+                )
+            )
+        for name, si, li in resolution.unmatched_attr_opens:
+            sec_id, num = where(si, li)
+            issues.append(
+                Issue(
+                    "unmatched_tag",
+                    "warning",
+                    f"Tag <{name} ...> at section '{sec_id}', line {num} "
+                    "has attributes but is never closed; kept as literal "
+                    "text.",
+                    f"{sec_id}.{num}",
+                )
+            )
+        for name_a, pos_a, name_b, pos_b in resolution.overlaps:
+            a_id, a_num = where(*pos_a)
+            b_id, b_num = where(*pos_b)
+            issues.append(
+                Issue(
+                    "tag_overlap",
+                    "warning",
+                    f"Tags <{name_a}> (section '{a_id}', line {a_num}) and "
+                    f"<{name_b}> (section '{b_id}', line {b_num}) overlap "
+                    "without nesting.",
+                    f"{a_id}.{a_num}",
+                )
+            )
+        for name, open_pos, close_pos in resolution.cross_section:
+            o_id, o_num = where(*open_pos)
+            c_id, c_num = where(*close_pos)
+            issues.append(
+                Issue(
+                    "tag_crosses_section",
+                    "warning",
+                    f"Tag <{name}> opened at section '{o_id}', line {o_num} "
+                    f"closes in section '{c_id}', line {c_num}. If the "
+                    "opener is a West-style supplement, it has been absorbed "
+                    "by an unrelated end tag.",
+                    f"{o_id}.{o_num}",
+                )
+            )
+        for si, li in resolution.tag_only_lines:
+            sec_id, num = where(si, li)
+            issues.append(
+                Issue(
+                    "tag_only_line",
+                    "warning",
+                    f"Line {num} of section '{sec_id}' contains only markup "
+                    "but still consumes a line number.",
+                    f"{sec_id}.{num}",
+                )
+            )
         return issues
 
     @property
