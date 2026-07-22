@@ -14,9 +14,10 @@ Example usage:
 
 from .models import Document, Issue, Line, Metadata, Section
 from .parser import parse
+from .tags import Tag
 from .writer import write
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 __all__ = [
     "Document",
@@ -24,6 +25,7 @@ __all__ = [
     "Line",
     "Metadata",
     "Section",
+    "Tag",
     "parse",
     "write",
     "__version__",

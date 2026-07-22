@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-22
+
+### Added
+- **Inline TEI/XML tag tolerance.** On the markdown~HTML analogy, valid TEI fragments
+  inside a txtdown body now parse seamlessly and yield clean NLP plaintext: a project
+  may add tags such as `<persName>` or `<placeName n="pleiades:413032">` (see Berti,
+  Crane & Babeu 2026, "Philology and Digital Texts"). Tags pass through to `Line.text`
+  verbatim and round-trip through `write()` unchanged; the feature lives in new
+  accessors. Angle brackets are disambiguated from West-1973 editorial supplements
+  *structurally*: a token counts as an XML tag only when it is self-closing, an end
+  tag, or a start tag with a matching end tag later in the document — a lone unmatched
+  `<word>` stays literal text, so West notation is unaffected.
+- **`.plain` and `.tags` accessors** on `Line`, `Section`, and `Document`: `.plain` is
+  the tag-stripped text (lines joined with `\n`, sections with `\n\n`); `.tags` returns
+  resolved `Tag` spans (`name`, `attrs`, `start`/`end` offsets into the corresponding
+  `.plain`, `self_closing`) at that granularity — same-line pairs on the line,
+  cross-line pairs on the section, cross-section pairs on the document. The new `Tag`
+  class is exported from the package.
+- **Tag validation.** `Document.validate()` adds four warning-severity `Issue` kinds:
+  `unmatched_tag` (a stray end tag, or an attribute-bearing start tag never closed —
+  a bare unmatched `<word>` is never flagged, it is by definition a West supplement),
+  `tag_overlap` (pairs crossing without nesting), `tag_crosses_section` (a pair
+  opening in one section and closing in another), and `tag_only_line` (a line of pure
+  markup still consumes a line number).
+- `examples/sulpicia-tei.txtd` — Sulpicia with TEI named entities, a Pleiades
+  identifier, a milestone tag, and a deliberate West supplement side by side.
+- README **References** section (Berti/Crane/Babeu 2026; DeRose et al. 1990; Gruber
+  2004; West 1973).
+
+### Fixed
+- **Attribute quotes no longer break direct-speech validation.** Quote scanning now
+  operates on tag-stripped text and skips XML-shaped tokens that stayed literal, so
+  the ASCII quotes in `<placeName n="pleiades:413032">` no longer produce false
+  `unmatched_quote` errors.
+
 ## [0.3.1] - 2026-07-09
 
 ### Added
@@ -76,6 +111,7 @@ First public release.
 - Auto-numbered lines with 1-indexed, citation-based access (`doc.get("2.3")`).
 - Round-trip-safe `parse()` / `write()`.
 
+[0.4.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.4.0
 [0.3.1]: https://github.com/diyclassics/txtdown/releases/tag/v0.3.1
 [0.3.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.3.0
 [0.2.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.2.0

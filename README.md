@@ -1,6 +1,6 @@
 <img src="https://raw.githubusercontent.com/diyclassics/txtdown/main/assets/txtdown-logo.jpg" alt="txtdown" width="400">
 
-[![PyPI version](https://img.shields.io/badge/pypi-v0.3.1-orange.svg)](https://pypi.org/project/txtdown/)
+[![PyPI version](https://img.shields.io/badge/pypi-v0.4.0-orange.svg)](https://pypi.org/project/txtdown/)
 [![Python versions](https://img.shields.io/pypi/pyversions/txtdown.svg)](https://pypi.org/project/txtdown/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -233,6 +233,64 @@ lines are excluded):
 Nesting is out of scope (single depth): while a span is open, only its own closing
 character is significant, so a nested quote of another style passes through unexamined.
 
+### Inline TEI/XML Tags
+
+On the markdown~HTML analogy, txtdown tolerates inline TEI/XML markup: valid TEI
+fragments inside a txtdown body parse seamlessly and still yield clean plaintext for
+NLP. txtdown defines no named-entity syntax of its own, but a project that wants one can
+use TEI tags directly (see Berti, Crane & Babeu 2026 on inline TEI for citation
+structure, quotation, and named entities):
+
+```
+exorata meis illum <persName>Cytherea</persName> Camenis
+    atque <placeName n="pleiades:413032">Arretino</placeName> frigidus amnis agro?
+```
+
+The parser passes tags through to `line.text` verbatim (like Direct Speech, this is an
+accessor/validation feature — `write()` round-trips them unchanged). Tag-stripped text
+and resolved spans are exposed at every level:
+
+```python
+line.plain      # 'exorata meis illum Cytherea Camenis'
+section.plain   # lines joined with '\n', tags stripped
+doc.plain       # sections joined with '\n\n', tags stripped
+line.tags       # [Tag(name='persName', attrs={}, start=19, end=27)]
+section.tags    # includes pairs that span lines
+doc.tags        # everything, incl. pairs that span sections
+```
+
+`Tag.start`/`Tag.end` index into the corresponding `.plain` text, so
+`plain[tag.start:tag.end]` is the enclosed text — standoff-annotation friendly. A
+self-closing milestone (`<pb n="2"/>`) has `start == end`.
+
+**Coexistence with West (1973) editorial notation.** In the CRAWL/LatinCy ecosystem
+`<text>` already means an editorial supplement, so angle brackets are disambiguated
+*structurally*: a token counts as an XML tag only when it is self-closing (`<gap/>`), an
+end tag (`</persName>`), or a start tag with a matching end tag later in the document. A
+lone unmatched `<word>` stays literal text — a West supplement:
+
+```
+    non tempestivae, saeve <propinque>, viae.
+```
+
+Here `<propinque>` survives in `.plain` untouched, while the `<persName>` pair above is
+stripped. `†crux†`, `{deletion}`, and `M(arcus)` contain no angle brackets and are never
+affected.
+
+`doc.validate()` adds four tag checks, all **warnings** (a suspicious tag never breaks
+citation lookup): **`unmatched_tag`** (a stray end tag, or an *attribute-bearing* start
+tag that is never closed — a bare unmatched `<word>` is never flagged, it is by
+definition a West supplement), **`tag_overlap`** (`<a><b></a></b>`),
+**`tag_crosses_section`** (a pair opening in one section and closing in another —
+usually a West supplement absorbed by an unrelated end tag), and **`tag_only_line`** (a
+line containing only markup still consumes a line number, shifting verse numbering —
+prefer attaching milestones to a text line: `<milestone n="4"/>hic animum...`).
+
+Out of scope (always literal): comments, CDATA, processing instructions, DOCTYPE,
+unquoted attribute values. Block-structure tags (`<div>`, `<lg>`) are tolerated like any
+inline tag but are **not** mapped onto txtdown sections — `---` remains the only
+structural grammar. See `examples/sulpicia-tei.txtd`.
+
 ### Metadata
 
 | Field | Description |
@@ -257,6 +315,10 @@ Additional fields are preserved in `metadata.extras`.
 - `Section` — Container with `id: str`, `lines: list[Line]`, optional `title` and `metadata`
 - `Line` — Container with `text: str`, `number: int`, optional `speaker: str | None` and `label: str | None`, and `is_quote: bool` (cross-source quotation)
 - `Metadata` — Container with `author`, `work`, `source`, `scope`, and `extras` dict
+- `Tag` — A resolved inline XML tag: `name`, `attrs: dict`, `start`/`end` offsets into the corresponding `.plain` text, `self_closing: bool`
+
+`Document`, `Section`, and `Line` all expose `.plain` (text with inline XML tags
+stripped) and `.tags` (resolved `Tag` spans at that granularity).
 
 ## Development
 
@@ -276,6 +338,13 @@ pytest tests/ --cov=txtdown --cov-report=term-missing
 ## Project History
 
 The idea for txtdown originated in January 2018, inspired by the need for a document format for Latin text collections that balanced the simplicity of plaintext with the more involved markup of XML-based formats like TEI. The goal was to create a format that is both human-readable and computer-tractable, supporting hierarchical structures, fundamental annotations, and embedded metadata. Txtdown has since been influenced by ongoing work on annotation projects such as the [Representing Women Authorship in the Latin Treebanks (RWALT)](https://diyclassics.github.io/rwalt-site/) project.
+
+## References
+
+- Berti, Monica, Gregory R. Crane, and Alison Babeu. 2026. "Philology and Digital Texts." In *The Oxford Handbook of Digital Classical Studies*. Oxford: Oxford University Press. https://academic.oup.com/edited-volume/63135/chapter/56800380
+- DeRose, Steven J., David G. Durand, Elli Mylonas, and Allen H. Renear. 1990. "What Is Text, Really?" *Journal of Computing in Higher Education* 1 (2): 3–26. https://doi.org/10.1007/BF02941632
+- Gruber, John. 2004. *Markdown* (v1.0.1). https://daringfireball.net/projects/markdown/
+- West, Martin L. 1973. *Textual Criticism and Editorial Technique Applicable to Greek and Latin Texts*. Stuttgart: Teubner.
 
 ## License
 
