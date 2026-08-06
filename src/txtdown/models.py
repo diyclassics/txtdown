@@ -5,7 +5,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
-from .tags import Resolution, Tag, resolve
+from .tags import Reference, Resolution, Tag, resolve
 
 
 @dataclass
@@ -104,6 +104,18 @@ class Line:
         """
         resolution, si, li = self._tag_view()
         return list(resolution.line_tags[si][li])
+
+    @property
+    def refs(self) -> list[Reference]:
+        """Inline cross-references contained entirely in this line.
+
+        Markdown ``[X](Y)`` links (always same-line) and any link-bearing TEI
+        tag pair on this line. Offsets index into :attr:`plain`; targets are
+        opaque and never resolved. Pairs whose display spans a later line
+        appear in ``Section.refs`` / ``Document.refs`` instead.
+        """
+        resolution, si, li = self._tag_view()
+        return list(resolution.line_refs[si][li])
 
     def _tag_view(self) -> tuple[Resolution, int, int]:
         """Tag resolution covering this line, at the widest reachable scope."""
@@ -207,6 +219,17 @@ class Section:
         """
         resolution, si = self._tag_view()
         return list(resolution.section_tags[si])
+
+    @property
+    def refs(self) -> list[Reference]:
+        """Inline cross-references contained entirely in this section.
+
+        Includes link-bearing tag pairs whose display spans lines; offsets
+        index into :attr:`plain`. Cross-section references appear only in
+        ``Document.refs``.
+        """
+        resolution, si = self._tag_view()
+        return list(resolution.section_refs[si])
 
     @functools.cached_property
     def _tag_state(self) -> tuple[Resolution, dict[int, int]]:
@@ -338,6 +361,17 @@ class Document:
     def tags(self) -> list[Tag]:
         """All resolved inline XML tags, offsets into :attr:`plain`."""
         return list(self._tag_state[0].document_tags)
+
+    @property
+    def refs(self) -> list[Reference]:
+        """All resolved inline cross-references, offsets into :attr:`plain`.
+
+        Markdown ``[X](Y)`` links plus link-bearing TEI tags (``<ref target>``,
+        ``<quote corresp>``). Targets are opaque URIs, stored verbatim and
+        never resolved — a target may point at a file or locus that does not
+        exist. See :class:`txtdown.tags.Reference`.
+        """
+        return list(self._tag_state[0].document_refs)
 
     @functools.cached_property
     def _tag_state(

@@ -14,16 +14,17 @@ Example usage:
 
 from .models import Document, Issue, Line, Metadata, Section
 from .parser import parse
-from .tags import Tag
+from .tags import Reference, Tag
 from .writer import write
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "Document",
     "Issue",
     "Line",
     "Metadata",
+    "Reference",
     "Section",
     "Tag",
     "parse",
