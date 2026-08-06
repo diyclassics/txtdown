@@ -17,7 +17,7 @@ from .parser import parse
 from .tags import Reference, Tag
 from .writer import write
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "Document",

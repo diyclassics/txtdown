@@ -1,6 +1,6 @@
 <img src="https://raw.githubusercontent.com/diyclassics/txtdown/main/assets/txtdown-logo.jpg" alt="txtdown" width="400">
 
-[![PyPI version](https://img.shields.io/badge/pypi-v0.4.0-orange.svg)](https://pypi.org/project/txtdown/)
+[![PyPI version](https://img.shields.io/badge/pypi-v0.5.0-orange.svg)](https://pypi.org/project/txtdown/)
 [![Python versions](https://img.shields.io/pypi/pyversions/txtdown.svg)](https://pypi.org/project/txtdown/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -290,6 +290,37 @@ unquoted attribute values. Block-structure tags (`<div>`, `<lg>`) are tolerated 
 inline tag but are **not** mapped onto txtdown sections — `---` remains the only
 structural grammar. See `examples/sulpicia-tei.txtd`.
 
+### Inline Cross-references
+
+Continuing the markdown~TEI analogy, txtdown recognizes inline links. Two surface syntaxes
+compile to the same `Reference` model — the Markdown-style `[display](target)` link, and the
+TEI equivalents `<ref target="…">` and `<quote corresp="…">`:
+
+```
+quem [Naevius](naevius-clastidium.txtd#1.2) rettulit
+atque <quote corresp="urn:cts:latinLit:phi0474">summum ius summa iniuria</quote> ait
+```
+
+```python
+line.refs     # [Reference(display='Naevius', target='naevius-clastidium.txtd#1.2',
+              #            kind='link', syntax='markdown', start=5, end=12)]
+section.refs  # includes references whose display spans lines
+doc.refs      # everything, incl. references spanning sections
+```
+
+Offsets index into the corresponding `.plain`, exactly as `Tag` offsets do, so
+`plain[ref.start:ref.end] == ref.display`. A self-closing `<ptr target="…"/>` is an empty
+pointer (`display == ""`, `start == end`).
+
+**Targets are opaque.** A `target` is stored verbatim and is **never resolved or
+validated** — it may be a relative `.txtd` path with a `#citation` fragment, a CTS URN, a
+URL, or anything else, and it may dangle. Resolving targets across a set of documents is a
+separate concern and is not part of this package's encoding layer.
+
+A tag carrying no link-bearing attribute stays a plain `Tag`, not a `Reference`. And as with
+angle brackets, a bare `[bracket]` with no following `(target)` stays literal text, so West
+1973 notation is unaffected.
+
 ### Metadata
 
 | Field | Description |
@@ -315,9 +346,11 @@ Additional fields are preserved in `metadata.extras`.
 - `Line` — Container with `text: str`, `number: int`, optional `speaker: str | None` and `label: str | None`, and `is_quote: bool` (cross-source quotation)
 - `Metadata` — Container with `author`, `work`, `source`, `scope`, and `extras` dict
 - `Tag` — A resolved inline XML tag: `name`, `attrs: dict`, `start`/`end` offsets into the corresponding `.plain` text, `self_closing: bool`
+- `Reference` — A resolved inline cross-reference: `display`, `target` (opaque, never resolved), `kind` (`"link"` / `"quote"` / `"ref"`), `syntax` (`"markdown"` / `"tei"`), `start`/`end` offsets into the corresponding `.plain` text
 
 `Document`, `Section`, and `Line` all expose `.plain` (text with inline XML tags
-stripped) and `.tags` (resolved `Tag` spans at that granularity).
+stripped), `.tags` (resolved `Tag` spans at that granularity), and `.refs` (resolved
+`Reference` spans at that granularity).
 
 ## Development
 

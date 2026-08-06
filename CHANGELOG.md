@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-06
+
+### Added
+- **Inline cross-references.** On the same markdown~TEI analogy as 0.4.0's tag support, two
+  surface syntaxes now compile to a single `Reference` model: the Markdown-style
+  `[display](target)` link, and the TEI equivalents `<ref target="…">display</ref>` and
+  `<quote corresp="…">display</quote>`. A self-closing `<ptr target="…"/>` yields an empty
+  pointer (`display == ""`, `start == end`). A tag with no link-bearing attribute is a plain
+  `Tag`, not a `Reference`; a bare `[bracket]` with no `(target)` stays literal text, so West
+  1973 editorial supplements are unaffected.
+- **`.refs` accessor** on `Line`, `Section`, and `Document`, with the same scoping rule as
+  `.tags`: a reference is reported at the narrowest container that holds it entirely, so
+  same-line references appear on the line, display spanning lines on the section, and
+  cross-section on the document. Offsets index into the corresponding `.plain`
+  (`plain[start:end] == display`).
+- **`Reference` is exported** from the package. Fields: `display`, `target`, `kind`
+  (`"link"` / `"quote"` / `"ref"`), `syntax` (`"markdown"` / `"tei"`), `start`, `end`.
+
+### Notes
+- **Targets are opaque.** A `target` is stored verbatim and is **never resolved or
+  validated** — it may be a relative `.txtd` path with a `#citation` fragment, a CTS URN, a
+  URL, or anything else, and it may dangle. Resolving targets against a set of documents is
+  a deliberately separate concern and is **not** part of this release.
+- Link syntax round-trips: `Line.text` keeps the source syntax verbatim, and `write()` /
+  `parse()` are unchanged in behavior.
+
 ## [0.4.0] - 2026-07-22
 
 ### Added
@@ -111,6 +137,7 @@ First public release.
 - Auto-numbered lines with 1-indexed, citation-based access (`doc.get("2.3")`).
 - Round-trip-safe `parse()` / `write()`.
 
+[0.5.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.5.0
 [0.4.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.4.0
 [0.3.1]: https://github.com/diyclassics/txtdown/releases/tag/v0.3.1
 [0.3.0]: https://github.com/diyclassics/txtdown/releases/tag/v0.3.0
