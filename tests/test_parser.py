@@ -1137,7 +1137,7 @@ class TestParseExamples:
         assert doc.metadata.author == "Naevius"
         assert doc.metadata.work == "Clastidium"
         assert doc.sections[0].lines[0].text == (
-            "uita insepulta laetus in patriam redux"
+            "Vita insepulta laetus in patriam redux"
         )
         assert doc.validate() == []
 

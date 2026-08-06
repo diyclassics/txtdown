@@ -297,7 +297,7 @@ compile to the same `Reference` model — the Markdown-style `[display](target)`
 TEI equivalents `<ref target="…">` and `<quote corresp="…">`:
 
 ```
-quem [Naevius](naevius-clastidium.txtd#1.2) rettulit
+quem [Naevius](naevius-clastidium.txtd#praetexta.2) rettulit
 atque <quote corresp="urn:cts:latinLit:phi0474">summum ius summa iniuria</quote> ait
 ```
 
