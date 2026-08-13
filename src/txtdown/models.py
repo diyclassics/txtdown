@@ -610,18 +610,28 @@ class Document:
                         )
                     )
 
-        issues.extend(self._validate_quotes())
-        issues.extend(self._validate_tags())
+        # Resolve the live text rather than reading the cached ``_tag_state``
+        # snapshot: validation is a pure function of current state, so editing
+        # a line must change the result, and adding or removing one must not
+        # mis-index. The accessors (.plain/.tags/.refs) keep their cache.
+        resolution = resolve(
+            [[line.text for line in s.lines] for s in self.sections]
+        )
+        issues.extend(self._validate_quotes(resolution))
+        issues.extend(self._validate_tags(resolution))
 
         return issues
 
-    def _validate_quotes(self) -> list["Issue"]:
-        """Direct-speech quote pairing and style consistency (see validate)."""
+    def _validate_quotes(self, resolution: Resolution) -> list["Issue"]:
+        """Direct-speech quote pairing and style consistency (see validate).
+
+        Takes the caller's freshly-resolved ``resolution`` so that the text
+        scanned here and the sections walked below are the same generation.
+        """
         issues: list[Issue] = []
         open_style: str | None = None
         open_at: tuple[str, int] | None = None  # (section id, line number)
         styles_used: dict[str, tuple[str, int]] = {}  # style -> first location
-        resolution = self._tag_state[0]
 
         for si, section in enumerate(self.sections):
             for li, line in enumerate(section.lines):
@@ -730,10 +740,13 @@ class Document:
 
         return issues
 
-    def _validate_tags(self) -> list["Issue"]:
-        """Inline XML tag hygiene (see validate). All warnings."""
+    def _validate_tags(self, resolution: Resolution) -> list["Issue"]:
+        """Inline XML tag hygiene (see validate). All warnings.
+
+        Takes the caller's freshly-resolved ``resolution`` so that the spans
+        reported here index the same generation as ``self.sections``.
+        """
         issues: list[Issue] = []
-        resolution = self._tag_state[0]
 
         def where(si: int, li: int) -> tuple[str, int]:
             section = self.sections[si]
