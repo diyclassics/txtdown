@@ -152,6 +152,40 @@ class TestPlainAccessors:
         assert line.plain == "en <q>verba mea"
 
 
+class TestTagAttrsIsolation:
+    """Each scope's Tag owns its attrs dict (see resolve)."""
+
+    SRC = '--- 1\n<placeName n="pleiades:413032">Roma</placeName> caput\n'
+
+    def test_paired_tag_attrs_not_shared_across_scopes(self):
+        doc = parse(self.SRC)
+        line_tag = doc.sections[0].lines[0].tags[0]
+        section_tag = doc.sections[0].tags[0]
+        doc_tag = doc.tags[0]
+        assert line_tag.attrs == section_tag.attrs == doc_tag.attrs
+        assert line_tag.attrs is not section_tag.attrs
+        assert line_tag.attrs is not doc_tag.attrs
+        assert section_tag.attrs is not doc_tag.attrs
+
+    def test_mutating_one_scope_leaves_others_intact(self):
+        doc = parse(self.SRC)
+        doc.sections[0].lines[0].tags[0].attrs["n"] = "CHANGED"
+        assert doc.sections[0].tags[0].attrs["n"] == "pleiades:413032"
+        assert doc.tags[0].attrs["n"] == "pleiades:413032"
+        # Same-scope reads return the same cached Tag object, so the edit is
+        # still visible there — only the *other* scopes are insulated.
+        assert doc.sections[0].lines[0].tags[0].attrs["n"] == "CHANGED"
+
+    def test_selfclosing_tag_attrs_not_shared_across_scopes(self):
+        doc = parse('--- 1\nante <pb n="2"/> post\n')
+        line_tag = doc.sections[0].lines[0].tags[0]
+        section_tag = doc.sections[0].tags[0]
+        doc_tag = doc.tags[0]
+        assert line_tag.attrs == section_tag.attrs == doc_tag.attrs == {"n": "2"}
+        assert line_tag.attrs is not section_tag.attrs
+        assert section_tag.attrs is not doc_tag.attrs
+
+
 class TestTagSpans:
     def test_multiple_tags_one_line_offsets(self):
         doc = parse(

@@ -132,6 +132,38 @@ class TestRefsCoexistence:
         assert line.plain.endswith("redux")  # link display kept
         assert line.refs[0].target == "naevius#2"
 
+    def test_link_display_containing_paired_tag(self):
+        # Regression: a tag inside the display is *enclosed* by the link's
+        # span. An overlap (rather than containment) skip test discarded the
+        # link, leaking raw "[...](...)" into .plain and yielding no Reference.
+        doc = parse(
+            "--- 1\ndixit [<persName>Ennius</persName>](enn.txtd#1) verba\n"
+        )
+        line = doc.sections[0].lines[0]
+        assert line.plain == "dixit Ennius verba"
+        assert [t.name for t in line.tags] == ["persName"]
+        r = line.refs[0]
+        assert r.target == "enn.txtd#1"
+        assert r.display == "Ennius"
+        assert line.plain[r.start:r.end] == r.display
+
+    def test_link_display_containing_selfclosing_tag(self):
+        doc = parse("--- 1\nalter [a<pb/>b](x.txtd) finis\n")
+        line = doc.sections[0].lines[0]
+        assert line.plain == "alter ab finis"
+        r = line.refs[0]
+        assert r.target == "x.txtd"
+        assert line.plain[r.start:r.end] == "ab" == r.display
+
+    def test_link_display_partially_tagged(self):
+        # Tag covers only part of the display: still one link, one tag.
+        doc = parse("--- 1\n[Q. <persName>Ennius</persName>](enn.txtd#2)\n")
+        line = doc.sections[0].lines[0]
+        assert line.plain == "Q. Ennius"
+        r = line.refs[0]
+        assert r.target == "enn.txtd#2"
+        assert line.plain[r.start:r.end] == "Q. Ennius"
+
 
 class TestRefsRoundTrip:
     def test_links_survive_write_parse(self):
