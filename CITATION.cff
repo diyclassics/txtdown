@@ -16,7 +16,7 @@ repository-code: "https://github.com/diyclassics/txtdown"
 url: "https://github.com/diyclassics/txtdown"
 license: MIT
 version: 0.5.0
-date-released: "2026-08-06"
+date-released: "2026-08-13"
 keywords:
   - latin
   - markup
