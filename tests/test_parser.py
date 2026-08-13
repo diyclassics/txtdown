@@ -1127,6 +1127,8 @@ class TestParseExamples:
             "sulpicia.txtd",
             "sulpicia-tei.txtd",
             "naevius-clastidium.txtd",
+            "varro-de-lingua-latina.txtd",
+            "dulcitius-scene1.txtd",
         ):
             doc = parse(self.EXAMPLES_DIR / name)
             assert parse(write(doc)) == doc
@@ -1219,6 +1221,8 @@ class TestStrictValidation:
             "sulpicia.txtd",
             "sulpicia-tei.txtd",
             "naevius-clastidium.txtd",
+            "varro-de-lingua-latina.txtd",
+            "dulcitius-scene1.txtd",
         ):
             doc = strict_parse(examples_dir / name)  # must not raise
             assert doc.metadata.work
