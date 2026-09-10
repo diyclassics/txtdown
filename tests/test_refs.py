@@ -132,6 +132,80 @@ class TestRefsCoexistence:
         assert line.plain.endswith("redux")  # link display kept
         assert line.refs[0].target == "naevius#2"
 
+    def test_link_display_containing_paired_tag(self):
+        # Regression: a tag inside the display is *enclosed* by the link's
+        # span. An overlap (rather than containment) skip test discarded the
+        # link, leaking raw "[...](...)" into .plain and yielding no Reference.
+        doc = parse(
+            "--- 1\ndixit [<persName>Ennius</persName>](enn.txtd#1) verba\n"
+        )
+        line = doc.sections[0].lines[0]
+        assert line.plain == "dixit Ennius verba"
+        assert [t.name for t in line.tags] == ["persName"]
+        r = line.refs[0]
+        assert r.target == "enn.txtd#1"
+        assert r.display == "Ennius"
+        assert line.plain[r.start:r.end] == r.display
+
+    def test_link_display_containing_selfclosing_tag(self):
+        doc = parse("--- 1\nalter [a<pb/>b](x.txtd) finis\n")
+        line = doc.sections[0].lines[0]
+        assert line.plain == "alter ab finis"
+        r = line.refs[0]
+        assert r.target == "x.txtd"
+        assert line.plain[r.start:r.end] == "ab" == r.display
+
+    def test_link_display_partially_tagged(self):
+        # Tag covers only part of the display: still one link, one tag.
+        doc = parse("--- 1\n[Q. <persName>Ennius</persName>](enn.txtd#2)\n")
+        line = doc.sections[0].lines[0]
+        assert line.plain == "Q. Ennius"
+        r = line.refs[0]
+        assert r.target == "enn.txtd#2"
+        assert line.plain[r.start:r.end] == "Q. Ennius"
+
+    def test_tag_in_link_target_is_not_a_link(self):
+        # Regression: containment-only skip kept a link whose raw span encloses
+        # a tag sitting in the ](target) region. _strip deletes that region, so
+        # the tag and link interleave rather than nest: the cursor ran backwards
+        # and emitted negative offsets, and plain[t.start:t.end] silently
+        # returned text from the end of the string.
+        doc = parse("--- 1\n[x](y<z/>)\n")
+        line = doc.sections[0].lines[0]
+        assert line.plain == "[x](y)"  # not a link; syntax stays literal
+        assert line.refs == []
+        (tag,) = line.tags
+        assert (tag.start, tag.end) == (5, 5)
+        assert tag.start >= 0 and tag.end >= 0
+
+    def test_paired_tag_in_link_target_is_not_a_link(self):
+        doc = parse("--- 1\n[x](y<z>)</z> tail text here\n")
+        line = doc.sections[0].lines[0]
+        assert line.plain == "[x](y) tail text here"
+        assert line.refs == []
+        (tag,) = line.tags
+        assert line.plain[tag.start:tag.end] == ")"
+        assert tag.start >= 0 and tag.end >= 0
+
+    def test_link_inside_attribute_value_stays_literal(self):
+        # A West supplement whose text contains link syntax: the tag owns the
+        # text, so nothing is stripped and no Reference is produced.
+        doc = parse('--- 1\n<ref n="[a">b](c)\n')
+        line = doc.sections[0].lines[0]
+        assert line.plain == '<ref n="[a">b](c)'
+        assert line.refs == []
+
+    def test_no_negative_offsets_at_any_scope(self):
+        # The same corrupted plain_pos propagated to line-, section-, and
+        # document-scope tags, and into literal_spans (which validate() reads).
+        doc = parse("--- 1\n[x](y<z/>)\n[a](b<c>)</c> more\n")
+        scopes = [doc, doc.sections[0], *doc.sections[0].lines]
+        for scope in scopes:
+            for tag in scope.tags:
+                assert tag.start >= 0, (scope, tag)
+                assert tag.end >= 0, (scope, tag)
+                assert scope.plain[tag.start:tag.end] is not None
+
 
 class TestRefsRoundTrip:
     def test_links_survive_write_parse(self):

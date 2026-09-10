@@ -249,27 +249,30 @@ def resolve(section_texts: list[list[str]]) -> Resolution:
 
     for tok in tokens:
         if tok.kind == "selfclose":
+            # Each scope gets its own attrs copy: one dict shared across the
+            # line/section/document Tags (and the cached token) would make a
+            # mutation through any one of them visible through all the others.
             line_tags[tok.section][tok.line].append(
-                Tag(tok.name, tok.attrs, tok.plain_pos, tok.plain_pos, True)
+                Tag(tok.name, dict(tok.attrs), tok.plain_pos, tok.plain_pos, True)
             )
             section_tags[tok.section].append(
-                Tag(tok.name, tok.attrs, sec_pos(tok), sec_pos(tok), True)
+                Tag(tok.name, dict(tok.attrs), sec_pos(tok), sec_pos(tok), True)
             )
             document_tags.append(
-                Tag(tok.name, tok.attrs, doc_pos(tok), doc_pos(tok), True)
+                Tag(tok.name, dict(tok.attrs), doc_pos(tok), doc_pos(tok), True)
             )
 
     for opener, closer in pairs:
         document_tags.append(
-            Tag(opener.name, opener.attrs, doc_pos(opener), doc_pos(closer))
+            Tag(opener.name, dict(opener.attrs), doc_pos(opener), doc_pos(closer))
         )
         if opener.section == closer.section:
             section_tags[opener.section].append(
-                Tag(opener.name, opener.attrs, sec_pos(opener), sec_pos(closer))
+                Tag(opener.name, dict(opener.attrs), sec_pos(opener), sec_pos(closer))
             )
             if opener.line == closer.line:
                 line_tags[opener.section][opener.line].append(
-                    Tag(opener.name, opener.attrs, opener.plain_pos,
+                    Tag(opener.name, dict(opener.attrs), opener.plain_pos,
                         closer.plain_pos)
                 )
 
@@ -440,8 +443,17 @@ def _scan_links(section_texts: list[list[str]],
                 tokens: list[_Token]) -> list[_Link]:
     """Find Markdown ``[display](target)`` links, in document order.
 
-    A match that falls inside an XML tag token's raw span (e.g. a ``[x](y)``
-    sitting in an attribute value) is skipped — the tag owns that text.
+    A link is kept only when every tag token it touches lies wholly inside its
+    *display*: ``[<persName>Ennius</persName>](enn.txtd#1)`` is a link whose
+    display happens to be tagged, and survives.
+
+    Any other overlap is skipped. That covers a link wholly inside a tag's raw
+    span (``[x](y)`` in an attribute value — the tag owns that text), a tag in
+    the ``](target)`` region (``[x](y<z/>)``), and a tag straddling either
+    boundary. ``_strip`` deletes everything but the display, so in those cases
+    the tag and the link interleave rather than nest: the cursor would run
+    backwards and emit negative ``plain`` offsets, silently violating the
+    ``plain[tag.start:tag.end]`` invariant.
     """
     tag_spans: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
     for tok in tokens:
@@ -452,9 +464,12 @@ def _scan_links(section_texts: list[list[str]],
         for li, text in enumerate(line_texts):
             spans = tag_spans.get((si, li), [])
             for m in _LINK_PATTERN.finditer(text):
-                if any(s < m.end() and m.start() < e for s, e in spans):
-                    continue  # inside a tag token
-                close_start = m.start("display") + len(m.group("display"))
+                disp_start = m.start("display")
+                close_start = disp_start + len(m.group("display"))
+                if any(s < m.end() and m.start() < e
+                       and not (disp_start <= s and e <= close_start)
+                       for s, e in spans):
+                    continue  # tag overlaps the link outside its display
                 links.append(
                     _Link(si, li, m.group("target"),
                           m.start(), m.start() + 1, close_start, m.end())

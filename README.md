@@ -302,7 +302,8 @@ atque <quote corresp="urn:cts:latinLit:phi0474">summum ius summa iniuria</quote>
 ```
 
 ```python
-line.refs     # [Reference(display='Naevius', target='naevius-clastidium.txtd#1.2',
+line.refs     # [Reference(display='Naevius',
+              #            target='naevius-clastidium.txtd#praetexta.2',
               #            kind='link', syntax='markdown', start=5, end=12)]
 section.refs  # includes references whose display spans lines
 doc.refs      # everything, incl. references spanning sections

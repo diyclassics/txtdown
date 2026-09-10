@@ -204,3 +204,34 @@ class TestQuoteEdgeCases:
         issues = doc.validate()
         assert kinds(doc) == ["unmatched_quote"]
         assert issues[0].label == "1.2"
+
+
+class TestValidateReflectsCurrentState:
+    """validate() resolves live text, not the cached .plain snapshot.
+
+    The accessors (.plain/.tags/.refs) cache a Resolution on first access.
+    validate() must not read that snapshot: it walks the live sections, so a
+    stale snapshot would report edited text incorrectly and mis-index when
+    lines are added or removed.
+    """
+
+    def test_edit_after_plain_is_still_validated(self):
+        doc = parse("--- 1\ndixit verba\n")
+        assert doc.validate() == []
+        _ = doc.plain  # warm the cache
+        doc.sections[0].lines[0].text = 'dixit "verba'
+        assert kinds(doc) == ["unmatched_quote"]
+
+    def test_appending_a_line_after_plain_does_not_raise(self):
+        from txtdown import Line
+
+        doc = parse("--- 1\ndixit verba\n")
+        _ = doc.plain
+        doc.sections[0].lines.append(Line(number=2, text='altera "sine fine'))
+        assert kinds(doc) == ["unmatched_quote"]
+
+    def test_removing_a_line_after_plain_does_not_raise(self):
+        doc = parse("--- 1\nprima linea\naltera linea\n")
+        _ = doc.plain
+        del doc.sections[0].lines[1]
+        assert doc.validate() == []

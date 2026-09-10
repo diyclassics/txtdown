@@ -28,6 +28,10 @@ wheels/
 venv/
 ENV/
 
+# Secrets / local environment
+.env
+.env.*
+
 # uv (library: lockfile is not shipped or tracked)
 uv.lock
 
