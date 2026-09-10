@@ -443,11 +443,17 @@ def _scan_links(section_texts: list[list[str]],
                 tokens: list[_Token]) -> list[_Link]:
     """Find Markdown ``[display](target)`` links, in document order.
 
-    A match that falls *wholly* inside an XML tag token's raw span (e.g. a
-    ``[x](y)`` sitting in an attribute value) is skipped — the tag owns that
-    text. A link that merely overlaps a tag is kept: a display containing
-    inline tags (``[<persName>Ennius</persName>](enn.txtd#1)``) encloses those
-    tags, and is a link whose display happens to be tagged.
+    A link is kept only when every tag token it touches lies wholly inside its
+    *display*: ``[<persName>Ennius</persName>](enn.txtd#1)`` is a link whose
+    display happens to be tagged, and survives.
+
+    Any other overlap is skipped. That covers a link wholly inside a tag's raw
+    span (``[x](y)`` in an attribute value — the tag owns that text), a tag in
+    the ``](target)`` region (``[x](y<z/>)``), and a tag straddling either
+    boundary. ``_strip`` deletes everything but the display, so in those cases
+    the tag and the link interleave rather than nest: the cursor would run
+    backwards and emit negative ``plain`` offsets, silently violating the
+    ``plain[tag.start:tag.end]`` invariant.
     """
     tag_spans: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
     for tok in tokens:
@@ -458,9 +464,12 @@ def _scan_links(section_texts: list[list[str]],
         for li, text in enumerate(line_texts):
             spans = tag_spans.get((si, li), [])
             for m in _LINK_PATTERN.finditer(text):
-                if any(s <= m.start() and m.end() <= e for s, e in spans):
-                    continue  # wholly inside a tag token
-                close_start = m.start("display") + len(m.group("display"))
+                disp_start = m.start("display")
+                close_start = disp_start + len(m.group("display"))
+                if any(s < m.end() and m.start() < e
+                       and not (disp_start <= s and e <= close_start)
+                       for s, e in spans):
+                    continue  # tag overlaps the link outside its display
                 links.append(
                     _Link(si, li, m.group("target"),
                           m.start(), m.start() + 1, close_start, m.end())
