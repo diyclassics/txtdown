@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -43,6 +43,9 @@ Issues = "https://github.com/diyclassics/txtdown/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+txtdown = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

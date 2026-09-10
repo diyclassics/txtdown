@@ -1121,16 +1121,8 @@ class TestParseExamples:
         """Every shipped example round-trips through write()."""
         from txtdown import write
 
-        for name in (
-            "cicero-de-amicitia.txtd",
-            "augustine-civ-dei-1.2.txtd",
-            "sulpicia.txtd",
-            "sulpicia-tei.txtd",
-            "naevius-clastidium.txtd",
-            "varro-de-lingua-latina.txtd",
-            "dulcitius-scene1.txtd",
-        ):
-            doc = parse(self.EXAMPLES_DIR / name)
+        for path in sorted(self.EXAMPLES_DIR.glob("*.txtd")):
+            doc = parse(path)
             assert parse(write(doc)) == doc
 
     def test_naevius_fragment(self):
@@ -1215,14 +1207,6 @@ class TestStrictValidation:
     def test_shipped_examples_pass_strict(self):
         """Every shipped example satisfies strict validation."""
         examples_dir = Path(__file__).parent.parent / "examples"
-        for name in (
-            "cicero-de-amicitia.txtd",
-            "augustine-civ-dei-1.2.txtd",
-            "sulpicia.txtd",
-            "sulpicia-tei.txtd",
-            "naevius-clastidium.txtd",
-            "varro-de-lingua-latina.txtd",
-            "dulcitius-scene1.txtd",
-        ):
-            doc = strict_parse(examples_dir / name)  # must not raise
+        for path in sorted(examples_dir.glob("*.txtd")):
+            doc = strict_parse(path)  # must not raise
             assert doc.metadata.work
